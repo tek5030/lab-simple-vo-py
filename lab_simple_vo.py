@@ -63,14 +63,22 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             # FIXME: estimate = frame_to_frame_pose_estimator.estimate(corr_2d_2d)
             pass
 
-        # FIXME: Stuff below is for preliminary testing.
+        # FIXME: Dummy estimate.
+        pose_estimate = PoseEstimate()
+
+        # Update Augmented Reality visualization.
         ar_frame = tracking_frame.image
+        ar_rendering, mask = ar_renderer.update(pose_estimate)
+        if ar_rendering is not None:
+            ar_frame[mask] = ar_rendering[mask]
+
+        # FIXME: Stuff below is for preliminary testing.
         ar_frame = cv2.drawKeypoints(ar_frame, tracking_frame.keypoints, outImage=None, color=(0, 255, 0))
 
         cv2.imshow("AR visualisation", ar_frame)
         cv2.waitKey(10)
 
-        do_exit = scene_3d.update(tracking_frame.image, PoseEstimate())
+        do_exit = scene_3d.update(tracking_frame.image, pose_estimate)
         if do_exit:
             break
 
