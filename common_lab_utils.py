@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from pylie import SO3, SE3
+from anms import anms
 
 
 class Size:
@@ -143,13 +144,6 @@ class PerspectiveCamera:
         return measured_x_n[:2] - cls.project_to_normalised(x_c)
 
 
-def retain_best(keypoints, num_to_keep):
-    """Retains the given number of keypoints with highest response"""
-    num_to_keep = np.minimum(num_to_keep, len(keypoints))
-    best = np.argpartition([p.response for p in keypoints], -num_to_keep)[-num_to_keep:]
-    return best
-
-
 def extract_good_ratio_matches(matches, max_ratio):
     """
     Extracts a set of good matches according to the ratio test.
@@ -184,6 +178,9 @@ class CalibratedCamera:
     def capture_frame(self) -> np.ndarray:
         raise NotImplementedError("Called an abstract method in an abstract class!")
 
+    def capture_undistorted_frame(self) -> np.ndarray:
+        raise NotImplementedError("Called an abstract method in an abstract class!")
+
 
 class CalibratedRealSenseCamera(CalibratedCamera):
     def __init__(self):
@@ -194,21 +191,99 @@ class CalibratedRealSenseCamera(CalibratedCamera):
         # FIXME: Implement!
         pass
 
-    def capture_frame(self):
+    def capture_frame(self) -> np.ndarray:
+        # FIXME: Implement!
+        pass
+
+    def capture_undistorted_frame(self) -> np.ndarray:
         # FIXME: Implement!
         pass
 
 
 class CalibratedWebCamera(CalibratedCamera):
-    def __init__(self):
+    def __init__(self, camera_model: PerspectiveCamera, video_source=0):
         # Create model from calibration
-        super().__init__(self._get_model_from_calibration())
+        super().__init__(camera_model)
 
-    def _get_model_from_calibration(self) -> PerspectiveCamera:
-        # FIXME: Implement!
-        # Insert parameters from calibration:
-        pass
+        # Setup camera stream.
+        self._cap = cv2.VideoCapture(video_source)
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_model.image_size.width)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_model.image_size.height)
 
-    def capture_frame(self):
-        # FIXME: Implement!
-        pass
+        if not self._cap.isOpened():
+            raise RuntimeError(f"Could not open video source {video_source}")
+
+    def capture_frame(self) -> np.ndarray:
+        success, curr_frame = self._cap.read()
+
+        if not success:
+            raise RuntimeError(f"The video source stopped")
+
+        return curr_frame
+
+    def capture_undistorted_frame(self) -> np.ndarray:
+        return self.camera_model.undistort_image(self.capture_frame())
+
+
+class Frame:
+    # FIXME: Implement!
+    def __init__(self, image: np.ndarray, camera_model: PerspectiveCamera, keypoints, descriptors):
+        self._image = image
+        self._camera_model = camera_model
+        self._keypoints = keypoints
+        self._descriptors = descriptors
+        self._pose_w_c = None
+
+    @property
+    def image(self):
+        return self._image.copy()
+
+    @property
+    def camera_model(self):
+        return self._camera_model
+
+    @property
+    def keypoints(self):
+        return self._keypoints
+
+    @property
+    def descriptors(self):
+        return self._descriptors
+
+    @property
+    def pose_w_c(self):
+        return self._pose_w_c
+
+    @pose_w_c.setter
+    def pose_w_c(self, pose_w_c: SE3):
+        self._pose_w_c = pose_w_c
+
+
+class TrackingFrameExtractor:
+    def __init__(self, camera: CalibratedCamera, detector, desc_extractor, use_anms=True):
+        self._camera = camera
+        self._detector = detector
+        self._desc_extractor = desc_extractor
+        self._use_anms = use_anms
+
+    def extract_frame(self) -> Frame:
+        undistorted_frame = self._camera.capture_undistorted_frame()
+
+        # Detect and describe features.
+        gray_frame = cv2.cvtColor(undistorted_frame, cv2.COLOR_BGR2GRAY)
+        keypoints = self._detector.detect(gray_frame)
+
+        if self._use_anms:
+            keypoints = self._adaptive_non_maximal_suppression(keypoints, self._camera.camera_model.image_size)
+
+        keypoints, descriptors = self._desc_extractor.compute(gray_frame, keypoints)
+
+        return Frame(undistorted_frame, self._camera.camera_model, keypoints, descriptors)
+
+    @staticmethod
+    def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=1000, max_ratio=0.7, tolerance=0.1):
+        keypoints = sorted(keypoints, key=lambda x: x.response, reverse=True)
+
+        num_to_retain = min(max_num, round(max_ratio * len(keypoints)))
+        return anms.ssc(keypoints, num_to_retain, tolerance, img_size.width, img_size.height)
+
