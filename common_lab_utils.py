@@ -46,6 +46,18 @@ class FrameToFrameCorrespondences:
 
 
 @dataclass
+class MapToFrameCorrespondences:
+    map_points: np.ndarray
+    frame_points: np.ndarray
+    map_point_indices: np.ndarray
+    frame_point_indices: np.ndarray
+
+    @property
+    def size(self):
+        return len(self.map_points)  # FIXME: riktig dimensjon
+
+
+@dataclass
 class RelativePoseEstimate:
     R: np.ndarray = np.eye(3, dtype=np.float32)
     t: np.ndarray = np.zeros(3, dtype=np.float32)
@@ -181,6 +193,53 @@ class PerspectiveCamera:
         return measured_x_n[:2] - cls.project_to_normalised(x_c)
 
 
+class Frame:
+    # FIXME: Implement!
+    def __init__(self, image: np.ndarray, camera_model: PerspectiveCamera, keypoints, descriptors):
+        self._image = image
+        self._camera_model = camera_model
+        self._keypoints = keypoints
+        self._descriptors = descriptors
+        self._pose_w_c = None
+
+    @property
+    def image(self):
+        return self._image.copy()
+
+    @property
+    def camera_model(self):
+        return self._camera_model
+
+    @property
+    def keypoints(self):
+        return self._keypoints
+
+    @property
+    def descriptors(self):
+        return self._descriptors
+
+    @property
+    def pose_w_c(self) -> SE3:
+        return self._pose_w_c
+
+    @pose_w_c.setter
+    def pose_w_c(self, pose_w_c: SE3):
+        self._pose_w_c = pose_w_c
+
+
+@dataclass
+class Map:
+    frame_1: Frame
+    frame_2: Frame
+    world_points: np.ndarray
+    world_descriptors: np.ndarray
+
+    @classmethod
+    def create(cls, frame_1: Frame, frame_2: Frame, corr: FrameToFrameCorrespondences, world_points: np.ndarray):
+        world_descriptors = frame_2.descriptors[corr.points_index_2, :]
+        return cls(frame_1, frame_2, world_points, world_descriptors)
+
+
 def extract_good_ratio_matches(matches, max_ratio):
     """
     Extracts a set of good matches according to the ratio test.
@@ -262,40 +321,6 @@ class CalibratedWebCamera(CalibratedCamera):
         return self.camera_model.undistort_image(self.capture_frame())
 
 
-class Frame:
-    # FIXME: Implement!
-    def __init__(self, image: np.ndarray, camera_model: PerspectiveCamera, keypoints, descriptors):
-        self._image = image
-        self._camera_model = camera_model
-        self._keypoints = keypoints
-        self._descriptors = descriptors
-        self._pose_w_c = None
-
-    @property
-    def image(self):
-        return self._image.copy()
-
-    @property
-    def camera_model(self):
-        return self._camera_model
-
-    @property
-    def keypoints(self):
-        return self._keypoints
-
-    @property
-    def descriptors(self):
-        return self._descriptors
-
-    @property
-    def pose_w_c(self) -> SE3:
-        return self._pose_w_c
-
-    @pose_w_c.setter
-    def pose_w_c(self, pose_w_c: SE3):
-        self._pose_w_c = pose_w_c
-
-
 class TrackingFrameExtractor:
     def __init__(self, camera: CalibratedCamera, detector, desc_extractor, use_anms=True):
         self._camera = camera
@@ -349,5 +374,14 @@ class Matcher:
             np.asarray(point_index_2)
         )
 
-    def match_map_to_frame(self, map, frame: Frame):
-        pass
+    def match_map_to_frame(self, active_map: Map, frame: Frame) -> MapToFrameCorrespondences:
+        matches = self._matcher.knnMatch(frame.descriptors, active_map.world_descriptors, k=2)
+        good_matches = extract_good_ratio_matches(matches, self._max_ratio)
+
+        map_ind = [m.trainIdx for m in good_matches]
+        map_points = [k.pt for k in np.asarray(active_map.world_points[map_ind])]
+
+        frame_ind = [m.queryIdx for m in good_matches]
+        frame_points = [k.pt for k in frame.keypoints[frame_ind]]
+
+        return MapToFrameCorrespondences(map_points, frame_points, map_ind, frame_ind)
