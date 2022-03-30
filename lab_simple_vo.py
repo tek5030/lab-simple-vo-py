@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Size, PerspectiveCamera, TrackingFrameExtractor, Matcher)
-from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate)
+from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Frame, Size, PerspectiveCamera, TrackingFrameExtractor, Matcher, PointsEstimate, RelativePoseEstimate, FrameToFrameCorrespondences)
+from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate, SobaPointsEstimator)
 from pylie import SO3, SE3
 from visualisation import (ArRenderer, Scene3D, print_info_in_image)
 
@@ -66,10 +66,10 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             if estimate is not None:
                 # Update frame poses with 2d-2d estimate (first camera is origin).
                 active_keyframe.pose_w_c = SE3()
-                tracking_frame.pose_w_c = SE3((SO3(estimate["R"]), estimate["t"]))
+                tracking_frame.pose_w_c = estimate.pose
 
                 # Compute an initial 3d map from the correspondences by using the epipolar geometry.
-                # FIXME init_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate["inliers"])
+                init_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate.inliers)
 
 
         # FIXME: Dummy estimate.
@@ -117,7 +117,7 @@ class TwoViewRelativePoseEstimator:
         self._K = K
         self._max_epipolar_distance = max_epipolar_distance
 
-    def estimate(self, corr):
+    def estimate(self, corr: FrameToFrameCorrespondences) -> RelativePoseEstimate:
         """
         Estimate the relative pose from 2d-2d correspondences.
 
@@ -128,12 +128,12 @@ class TwoViewRelativePoseEstimator:
         min_number_points = 3 * 5
 
         # Check that we have enough points.
-        if corr["size"] < min_number_points:
+        if corr.size < min_number_points:
             return None
 
         # Get references to 2d-2d point correspondences
-        points_1 = corr["points_1"]
-        points_2 = corr["points_2"]
+        points_1 = corr.points_1
+        points_2 = corr.points_2
 
         # Find inliers with the 5-point algorithm
         p = 0.99
@@ -142,10 +142,10 @@ class TwoViewRelativePoseEstimator:
         # Extract inlier correspondences by using inlier mask.
         inlier_points_1 = points_1[mask]
         inlier_points_2 = points_2[mask]
-        inlier_indices_1 = corr["point_index_1"][mask]
-        inlier_indices_2 = corr["point_index_2"][mask]
+        inlier_indices_1 = corr.points_index_1[mask]
+        inlier_indices_2 = corr.points_index_2[mask]
 
-        if len(inlier_points_1) < min_number_points:
+        if inlier_points_1.shape[0] < min_number_points:
             return None
 
         # Compute Fundamental Matrix from all inliers.
@@ -161,33 +161,28 @@ class TwoViewRelativePoseEstimator:
             return None
 
         # Return estimate.
-        inlier_corr = {
-            "points_1": np.asarray(inlier_points_1),
-            "points_2": np.asarray(inlier_points_2),
-            "point_index_1": np.asarray(inlier_indices_1),
-            "point_index_2": np.asarray(inlier_indices_2),
-            "size": len(inlier_points_1)
-        }
 
-        return {
-            "R": R,
-            "t": t,
-            "inlier_corr": inlier_corr,
-            "num_pass_check": num_pass_check
-        }
+        inlier_corr = FrameToFrameCorrespondences(
+            np.asarray(inlier_points_1),
+            np.asarray(inlier_points_2),
+            np.asarray(inlier_indices_1),
+            np.asarray(inlier_indices_2)
+        )
+
+        return RelativePoseEstimate(R, t, inlier_corr, num_pass_check)
 
 
 class DltPointsEstimator:
-    # FIXME: Implement!
-    def __init__(self):
-        pass
+    """Points estimator based on the DLT triangulation algorithm."""
 
+    def estimate(self, frame_1: Frame, frame_2: Frame, corr):
+        proj_mat_1 = frame_1.camera_model.calibration_matrix @ frame_1.pose_w_c.inverse().to_matrix()[:3, :]
+        proj_mat_2 = frame_2.camera_model.calibration_matrix @ frame_2.pose_w_c.inverse().to_matrix()[:3, :]
 
-class SobaPointsEstimator:
-    # FIXME: Implement!
-    def __init__(self, init_estimator):
-        pass
+        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, corr.points_1.T, corr.points_2.T)
+        x = x_hom[0:-1, :] / x_hom[-1, :]
 
+        return PointsEstimate(x)
 
 def setup_camera_model_for_webcam():
     """Constructs the camera model according to the results from camera calibration"""

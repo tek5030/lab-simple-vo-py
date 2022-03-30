@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from pylie import SO3, SE3
 from dataclasses import dataclass
-from common_lab_utils import (PerspectiveCamera, Frame)
+from common_lab_utils import (Frame, PerspectiveCamera, PointsEstimate)
 from bundle_adjustment import (PrecalibratedCameraMeasurementsFixedWorld,
                                PrecalibratedMotionOnlyBAObjective,
                                PrecalibratedCameraMeasurementsFixedCamera,
@@ -143,8 +143,8 @@ class SobaPointsEstimator:
 
         # Create measurement set for each camera.
         measurements = [
-            PrecalibratedCameraMeasurementsFixedCamera(frame_1.camera_model, frame_1.pose_w_c, corr.points_1),
-            PrecalibratedCameraMeasurementsFixedCamera(frame_2.camera_model, frame_2.pose_w_c, corr.points_1)
+            PrecalibratedCameraMeasurementsFixedCamera(frame_1.camera_model, frame_1.pose_w_c, corr.points_1.T), # FIXME: denne antar nx2, ikke 2xn
+            PrecalibratedCameraMeasurementsFixedCamera(frame_2.camera_model, frame_2.pose_w_c, corr.points_1.T)  # FIXME: denne antar nx2, ikke 2xn
             ]
 
         # Construct model from measurements.

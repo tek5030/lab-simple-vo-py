@@ -1,4 +1,5 @@
 import cv2
+from dataclasses import dataclass
 import numpy as np
 from pylie import SO3, SE3
 from anms import anms
@@ -22,6 +23,42 @@ class Size:
     @property
     def height(self):
         return self._height
+
+
+@dataclass
+class PointsEstimate:
+    world_points: np.ndarray = np.array([], dtype=np.float32)
+
+    def is_found(self):
+        return self.world_points.ndim and self.world_points.shape[1] > 0
+
+
+@dataclass
+class FrameToFrameCorrespondences:
+    points_1: np.array([], dtype=np.float32)
+    points_2: np.array([], dtype=np.float32)
+    points_index_1: np.array([], dtype=np.float32)
+    points_index_2: np.array([], dtype=np.float32)
+
+    @property
+    def size(self):
+        return self.points_1.shape[0]
+
+
+@dataclass
+class RelativePoseEstimate:
+    R: np.ndarray = np.eye(3, dtype=np.float32)
+    t: np.ndarray = np.zeros(3, dtype=np.float32)
+    inliers: FrameToFrameCorrespondences = ()
+    num_passed: int = 0
+
+    @property
+    def pose(self):
+        return SE3((SO3(self.R), self.t))
+
+    @property
+    def is_found(self):
+        return self.num_passed > 0
 
 
 def homogeneous(x):
@@ -251,7 +288,7 @@ class Frame:
         return self._descriptors
 
     @property
-    def pose_w_c(self):
+    def pose_w_c(self) -> SE3:
         return self._pose_w_c
 
     @pose_w_c.setter
@@ -293,7 +330,7 @@ class Matcher:
         self._matcher = cv2.BFMatcher_create(norm_type)
         self._max_ratio = max_ratio
 
-    def match_frame_to_frame(self, frame_1: Frame, frame_2: Frame):
+    def match_frame_to_frame(self, frame_1: Frame, frame_2: Frame) -> FrameToFrameCorrespondences:
         k = 2
         matches = self._matcher.knnMatch(frame_2.descriptors, frame_1.descriptors, k)
         good_matches = extract_good_ratio_matches(matches, self._max_ratio)
@@ -305,13 +342,12 @@ class Matcher:
         points_2 = [k.pt for k in np.asarray(frame_2.keypoints)[point_index_2]]
         # Fixme: hvorfor blir disse helt like
 
-        return {
-            "points_1": np.asarray(points_1),
-            "points_2": np.asarray(points_2),
-            "point_index_1": np.asarray(point_index_1),
-            "point_index_2": np.asarray(point_index_2),
-            "size": len(good_matches)
-        }
+        return FrameToFrameCorrespondences(
+            np.asarray(points_1),  # FIXME: noe annet enn transponering mulig?
+            np.asarray(points_2),
+            np.asarray(point_index_1),
+            np.asarray(point_index_2)
+        )
 
     def match_map_to_frame(self, map, frame: Frame):
         pass
