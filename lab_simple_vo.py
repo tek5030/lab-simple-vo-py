@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Size, PerspectiveCamera, TrackingFrameExtractor)
-from pose_estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate)
+from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate)
 from visualisation import (ArRenderer, Scene3D, print_info_in_image)
 
 

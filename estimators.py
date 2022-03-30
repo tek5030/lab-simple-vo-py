@@ -2,9 +2,14 @@ import numpy as np
 import cv2
 from pylie import SO3, SE3
 from dataclasses import dataclass
-from common_lab_utils import (PerspectiveCamera)
-from bundle_adjustment import (PrecalibratedCameraMeasurementsFixedWorld, PrecalibratedMotionOnlyBAObjective,
-                               gauss_newton, levenberg_marquardt)
+from common_lab_utils import (PerspectiveCamera, Frame)
+from bundle_adjustment import (PrecalibratedCameraMeasurementsFixedWorld,
+                               PrecalibratedMotionOnlyBAObjective,
+                               PrecalibratedCameraMeasurementsFixedCamera,
+                               PrecalibratedStructureOnlyBAObjective,
+                               CompositeStateVariable,
+                               gauss_newton,
+                               levenberg_marquardt)
 
 
 @dataclass
@@ -112,7 +117,7 @@ class MobaPoseEstimator:
 
         # Optimize and update estimate.
         states, cost, _, _ = levenberg_marquardt(estimate.pose_w_c, objective)
-        estimate.pose_w_c = states[-2]
+        estimate.pose_w_c = states[-1]
 
         # Print cost.
         if self._print_cost:
@@ -120,3 +125,41 @@ class MobaPoseEstimator:
 
         return estimate
 
+
+class SobaPointsEstimator:
+
+    def __init__(self, initial_points_estimator, print_cost=True):
+        self._initial_points_estimator = initial_points_estimator
+        self._print_cost = print_cost
+
+    def estimate(self, frame_1: Frame, frame_2: Frame, corr):
+        # FIXME: Implement FrameToFrameCorrespondences corr, PointsEstimate.
+
+        # Get initial points estimate.
+        estimate = self._initial_points_estimator.estimate(frame_1, frame_2, corr)
+
+        if not estimate.is_found():
+            return estimate
+
+        # Create measurement set for each camera.
+        measurements = [
+            PrecalibratedCameraMeasurementsFixedCamera(frame_1.camera_model, frame_1.pose_w_c, corr.points_1),
+            PrecalibratedCameraMeasurementsFixedCamera(frame_2.camera_model, frame_2.pose_w_c, corr.points_1)
+            ]
+
+        # Construct model from measurements.
+        objective = PrecalibratedStructureOnlyBAObjective(measurements)
+
+        # Set initial state.
+        # FIXME: NB: For this to work, world_points must be a list of 3D numpy arrays.
+        init_state = CompositeStateVariable(estimate.world_points)
+
+        # Optimize and update estimate.
+        states, cost, _, _ = levenberg_marquardt(init_state, objective)
+        estimate.world_points = states[-1].variables
+
+        # Print cost.
+        if self._print_cost:
+            print(f"Structure only BA solved in {(len(cost) - 1):#2d} iterations, cost: {cost[0]:#f} -> {cost[-1]:#f}")
+
+        return estimate

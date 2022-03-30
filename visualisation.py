@@ -3,7 +3,7 @@ import pyvista as pv
 import cv2
 from pylie import SE3
 from common_lab_utils import PerspectiveCamera
-from pose_estimators import PoseEstimate
+from estimators import PoseEstimate
 
 
 class Scene3D:
