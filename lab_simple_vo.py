@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Size, PerspectiveCamera, TrackingFrameExtractor)
+from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Size, PerspectiveCamera, TrackingFrameExtractor, Matcher)
 from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate)
 from visualisation import (ArRenderer, Scene3D, print_info_in_image)
 
@@ -26,6 +26,7 @@ def run_simple_vo_lab(camera: CalibratedCamera):
     detector = cv2.FastFeatureDetector_create()
     desc_extractor = cv2.ORB_create()
     frame_extractor = TrackingFrameExtractor(camera, detector, desc_extractor)
+    matcher = Matcher(desc_extractor.defaultNorm())
 
     # Construct AR visualizer.
     # FIXME: Show world origin in camera view!
@@ -57,7 +58,7 @@ def run_simple_vo_lab(camera: CalibratedCamera):
         # visualise the map initialization from 2d-2d correspondences.
         elif active_keyframe is not None:
             # Compute 2d-2d correspondences.
-            # FIXME: corr_2d_2d = matcher.match_frame_to_frame(active_keyframe, tracking_frame)
+            corr_2d_2d = matcher.match_frame_to_frame(active_keyframe, tracking_frame)
 
             # Estimate pose from 2d-2d correspondences.
             # FIXME: estimate = frame_to_frame_pose_estimator.estimate(corr_2d_2d)
@@ -76,7 +77,15 @@ def run_simple_vo_lab(camera: CalibratedCamera):
         ar_frame = cv2.drawKeypoints(ar_frame, tracking_frame.keypoints, outImage=None, color=(0, 255, 0))
 
         cv2.imshow("AR visualisation", ar_frame)
-        cv2.waitKey(10)
+        key = cv2.waitKey(10)
+        if key == ord('q'):
+            print("Bye")
+            break
+        elif key == ord(' '):
+            if active_keyframe is None:
+                print(f"Set active keyframe")
+                active_keyframe = tracking_frame
+
 
         do_exit = scene_3d.update(tracking_frame.image, pose_estimate)
         if do_exit:

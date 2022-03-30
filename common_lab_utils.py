@@ -287,3 +287,29 @@ class TrackingFrameExtractor:
         num_to_retain = min(max_num, round(max_ratio * len(keypoints)))
         return anms.ssc(keypoints, num_to_retain, tolerance, img_size.width, img_size.height)
 
+
+class Matcher:
+    def __init__(self, norm_type: int, max_ratio: float = 0.8):
+        self._matcher = cv2.BFMatcher_create(norm_type)
+        self._max_ratio = max_ratio
+
+    def match_frame_to_frame(self, frame_1: Frame, frame_2: Frame):
+        k = 2
+        matches = self._matcher.knnMatch(frame_2.descriptors, frame_1.descriptors, k)
+        good_matches = extract_good_ratio_matches(matches, self._max_ratio)
+
+        point_index_1 = [m.trainIdx for m in good_matches]
+        point_index_2 = [m.queryIdx for m in good_matches]
+
+        points_1 = [k.pt for k in np.asarray(frame_1.keypoints)[point_index_1]]
+        points_2 = [k.pt for k in np.asarray(frame_2.keypoints)[point_index_2]]
+
+        return {
+            "points_1": points_1,
+            "points_2": points_2,
+            "point_index_1": point_index_1,
+            "point_index_2": point_index_2
+        }
+
+    def match_map_to_frame(self, map, frame: Frame):
+        pass
