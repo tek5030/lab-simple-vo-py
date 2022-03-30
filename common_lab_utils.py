@@ -303,12 +303,14 @@ class Matcher:
 
         points_1 = [k.pt for k in np.asarray(frame_1.keypoints)[point_index_1]]
         points_2 = [k.pt for k in np.asarray(frame_2.keypoints)[point_index_2]]
+        # Fixme: hvorfor blir disse helt like
 
         return {
-            "points_1": points_1,
-            "points_2": points_2,
-            "point_index_1": point_index_1,
-            "point_index_2": point_index_2
+            "points_1": np.asarray(points_1),
+            "points_2": np.asarray(points_2),
+            "point_index_1": np.asarray(point_index_1),
+            "point_index_2": np.asarray(point_index_2),
+            "size": len(good_matches)
         }
 
     def match_map_to_frame(self, map, frame: Frame):

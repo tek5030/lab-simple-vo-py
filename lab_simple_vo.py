@@ -2,14 +2,14 @@ import cv2
 import numpy as np
 from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Size, PerspectiveCamera, TrackingFrameExtractor, Matcher)
 from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate)
+from pylie import SO3, SE3
 from visualisation import (ArRenderer, Scene3D, print_info_in_image)
 
 
 def run_simple_vo_lab(camera: CalibratedCamera):
     # Create the 2d-2d relative pose estimator.
     # We will use this for map creation.
-    # FIXME: Implement!
-    frame_to_frame_pose_estimator = TwoViewRelativePoseEstimator()
+    frame_to_frame_pose_estimator = TwoViewRelativePoseEstimator(camera.camera_model.calibration_matrix)
 
     # Create the 2d-3d pose estimator.
     # We will use this to navigate in maps between keyframes.
@@ -61,8 +61,16 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             corr_2d_2d = matcher.match_frame_to_frame(active_keyframe, tracking_frame)
 
             # Estimate pose from 2d-2d correspondences.
-            # FIXME: estimate = frame_to_frame_pose_estimator.estimate(corr_2d_2d)
-            pass
+            estimate = frame_to_frame_pose_estimator.estimate(corr_2d_2d)
+
+            if estimate is not None:
+                # Update frame poses with 2d-2d estimate (first camera is origin).
+                active_keyframe.pose_w_c = SE3()
+                tracking_frame.pose_w_c = SE3((SO3(estimate["R"]), estimate["t"]))
+
+                # Compute an initial 3d map from the correspondences by using the epipolar geometry.
+                # FIXME init_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate["inliers"])
+
 
         # FIXME: Dummy estimate.
         pose_estimate = PoseEstimate()
@@ -81,11 +89,16 @@ def run_simple_vo_lab(camera: CalibratedCamera):
         if key == ord('q'):
             print("Bye")
             break
+        elif key == ord('r'):
+            # Make all reference data empty.
+            print("reset")
+            active_keyframe = None
+            active_map = None
+            scene_3d = Scene3D(camera.camera_model)  # FIXME: scene_3d.reset()
         elif key == ord(' '):
             if active_keyframe is None:
                 print(f"Set active keyframe")
                 active_keyframe = tracking_frame
-
 
         do_exit = scene_3d.update(tracking_frame.image, pose_estimate)
         if do_exit:
@@ -93,9 +106,75 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 
 
 class TwoViewRelativePoseEstimator:
-    # FIXME: Implement!
-    def __init__(self):
-        pass
+    """Estimates the relative pose between to camera frames through epipolar geometry."""
+
+    def __init__(self, K: np.ndarray, max_epipolar_distance: float = 2.0):
+        """
+        Constructor
+
+        :param K: The intrinsic camera calibration matrix.
+        """
+        self._K = K
+        self._max_epipolar_distance = max_epipolar_distance
+
+    def estimate(self, corr):
+        """
+        Estimate the relative pose from 2d-2d correspondences.
+
+        :param corr: The 2d-2d correspondences between two frames.
+        """
+        # Set a minimum required number of points,
+        # here 3 times the theoretical minimum.
+        min_number_points = 3 * 5
+
+        # Check that we have enough points.
+        if corr["size"] < min_number_points:
+            return None
+
+        # Get references to 2d-2d point correspondences
+        points_1 = corr["points_1"]
+        points_2 = corr["points_2"]
+
+        # Find inliers with the 5-point algorithm
+        p = 0.99
+        mask = cv2.findEssentialMat(points_2, points_1, self._K, method=cv2.RANSAC, prob=p, threshold=self._max_epipolar_distance)[1]
+        mask = mask.ravel().astype(bool)
+        # Extract inlier correspondences by using inlier mask.
+        inlier_points_1 = points_1[mask]
+        inlier_points_2 = points_2[mask]
+        inlier_indices_1 = corr["point_index_1"][mask]
+        inlier_indices_2 = corr["point_index_2"][mask]
+
+        if len(inlier_points_1) < min_number_points:
+            return None
+
+        # Compute Fundamental Matrix from all inliers.
+        F = cv2.findFundamentalMat(inlier_points_2, inlier_points_1, cv2.FM_8POINT)[0]
+
+        # Compute Essential Matrix from Fundamental matrix.
+        E = self._K.T @ F @ self._K
+
+        # Recover pose from Essential Matrix.
+        num_pass_check, R, t, _ = cv2.recoverPose(E, inlier_points_2, inlier_points_1, self._K)
+
+        if num_pass_check < min_number_points:
+            return None
+
+        # Return estimate.
+        inlier_corr = {
+            "points_1": np.asarray(inlier_points_1),
+            "points_2": np.asarray(inlier_points_2),
+            "point_index_1": np.asarray(inlier_indices_1),
+            "point_index_2": np.asarray(inlier_indices_2),
+            "size": len(inlier_points_1)
+        }
+
+        return {
+            "R": R,
+            "t": t,
+            "inlier_corr": inlier_corr,
+            "num_pass_check": num_pass_check
+        }
 
 
 class DltPointsEstimator:
