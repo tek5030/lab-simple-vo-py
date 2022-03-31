@@ -3,7 +3,8 @@ from dataclasses import dataclass
 import numpy as np
 from pylie import SO3, SE3
 from anms import anms
-
+from realsense_common import (CameraStream, CaptureMode)
+from realsense_mono import (RealSenseSingleStreamCamera)
 
 class Size:
     """Represents image size"""
@@ -278,20 +279,29 @@ class CalibratedCamera:
 
 class CalibratedRealSenseCamera(CalibratedCamera):
     def __init__(self):
+        self._cam = RealSenseSingleStreamCamera(CameraStream.LEFT, CaptureMode.RECTIFIED)
+        # OBS: Hvis ikke RECTIFIED vil ikke `_get_model_from_camera` fungere
+
         # Create model from calibration
         super().__init__(self._get_model_from_camera())
 
     def _get_model_from_camera(self) -> PerspectiveCamera:
-        # FIXME: Implement!
-        pass
+        return PerspectiveCamera(
+            self._cam.get_calibration_matrix(self._cam.active_stream),
+            self._cam.get_distortion(self._cam.active_stream),
+            self._cam.get_resolution(self._cam.active_stream)
+        )
 
     def capture_frame(self) -> np.ndarray:
         # FIXME: Implement!
+        # Obs: kameramodellen gjelder ikke
+        # self._cam.capture_mode = CaptureMode.RECTIFIED
+        # return self._cam.get_frame()
         pass
 
     def capture_undistorted_frame(self) -> np.ndarray:
-        # FIXME: Implement!
-        pass
+        self._cam.capture_mode = CaptureMode.RECTIFIED
+        return self._cam.get_frame()
 
 
 class CalibratedWebCamera(CalibratedCamera):
