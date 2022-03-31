@@ -32,7 +32,6 @@ class FrameToFrameCorrespondences:
     points_index_1: np.array([], dtype=np.float32)
     points_index_2: np.array([], dtype=np.float32)
 
-    @property
     def size(self):
         return self.points_1.shape[0]
 
@@ -46,7 +45,7 @@ class MapToFrameCorrespondences:
 
     @property
     def size(self):
-        return len(self.map_points)  # FIXME: riktig dimensjon
+        return len(self.map_points)
 
 
 def homogeneous(x):
@@ -185,7 +184,6 @@ class PerspectiveCamera:
 
 
 class Frame:
-    # FIXME: Implement!
     def __init__(self, image: np.ndarray, camera_model: PerspectiveCamera, keypoints: tuple, descriptors: np.array):
         self._gray_image = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         self._colour_image = image if image.ndim == 3 else cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
@@ -222,6 +220,9 @@ class Frame:
     @pose_w_c.setter
     def pose_w_c(self, pose_w_c: SE3):
         self._pose_w_c = pose_w_c
+
+    def has_pose(self) -> bool:
+        return self._pose_w_c is not None
 
 
 @dataclass
@@ -332,6 +333,9 @@ class TrackingFrameExtractor:
         gray_frame = undist_frame if undist_frame.ndim == 2 else cv2.cvtColor(undist_frame, cv2.COLOR_BGR2GRAY)
         keypoints = self._detector.detect(gray_frame)
 
+        if len(keypoints) <= 5:
+            return Frame(undist_frame, self._camera.camera_model, (), np.array([]))
+
         if self._use_anms:
             keypoints = self._adaptive_non_maximal_suppression(keypoints, self._camera.camera_model.image_size)
 
@@ -340,11 +344,11 @@ class TrackingFrameExtractor:
         return Frame(undist_frame, self._camera.camera_model, keypoints, descriptors)
 
     @staticmethod
-    def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=2000, max_ratio=0.7, tolerance=0.1):
+    def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=1000, max_ratio=0.7, tolerance=0.1):
         keypoints = sorted(keypoints, key=lambda x: x.response, reverse=True)
 
         num_to_retain = min(max_num, round(max_ratio * len(keypoints)))
-        return anms.ssc(keypoints, num_to_retain, tolerance, img_size.width, img_size.height) # FIXME: ZeroDivisionError: float division by zero
+        return anms.ssc(keypoints, num_to_retain, tolerance, img_size.width, img_size.height)
 
 
 class Matcher:
@@ -361,10 +365,9 @@ class Matcher:
 
         points_1 = [k.pt for k in np.asarray(frame_1.keypoints)[point_index_1]]
         points_2 = [k.pt for k in np.asarray(frame_2.keypoints)[point_index_2]]
-        # Fixme: hvorfor blir disse helt like
 
         return FrameToFrameCorrespondences(
-            np.asarray(points_1),  # FIXME: noe annet enn transponering mulig?
+            np.asarray(points_1),
             np.asarray(points_2),
             np.asarray(point_index_1),
             np.asarray(point_index_2)

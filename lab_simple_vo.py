@@ -1,9 +1,12 @@
 import cv2
 import numpy as np
-from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Frame, Map, Size, PerspectiveCamera, TrackingFrameExtractor, Matcher, FrameToFrameCorrespondences, homogeneous, hnormalized)
-from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate, SobaPointsEstimator, PointsEstimate, RelativePoseEstimate)
+from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Frame, Map, Size,
+                              PerspectiveCamera, TrackingFrameExtractor, Matcher, FrameToFrameCorrespondences,
+                              homogeneous, hnormalized)
+from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate,
+                        SobaPointsEstimator, PointsEstimate, RelativePoseEstimate)
 from pylie import SO3, SE3
-from visualisation import (ArRenderer, Scene3D, print_info_in_image)
+from visualisation import (ArRenderer, Scene3D, draw_detected_keypoints, draw_tracked_points, draw_two_view_matching)
 
 
 def run_simple_vo_lab(camera: CalibratedCamera):
@@ -23,22 +26,19 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 
     # Set up keypoint detector and descriptor extractor for correspondence matching.
     detector = cv2.ORB_create(nfeatures=3000, fastThreshold=10)
-    desc_extractor = cv2.ORB_create()
+    desc_extractor = detector
     frame_extractor = TrackingFrameExtractor(camera, detector, desc_extractor)
     matcher = Matcher(desc_extractor.defaultNorm())
 
     # Construct AR visualizer.
-    # FIXME: Show world origin in camera view!
     ar_renderer = ArRenderer(camera.camera_model)
 
     # Construct 3D visualiser.
-    # FIXME: Finish! Must add keyframes, current implementation just modified copy from pose estimation lab.
     scene_3d = Scene3D(camera.camera_model)
 
     # Construct empty references to hold frames and maps.
     active_keyframe = None
     active_map = None
-    init_map = None
 
     # Main loop.
     while True:
@@ -46,9 +46,11 @@ def run_simple_vo_lab(camera: CalibratedCamera):
         tracking_frame = frame_extractor.extract_frame()
 
         # Construct image for visualisation.
-        ar_frame = tracking_frame.colour_image
+        ar_img = tracking_frame.colour_image
 
-        # FIXME: Dummy estimate.
+        # These will be used in visualisation below depending on the state.
+        init_pose_estimate = RelativePoseEstimate()
+        init_point_estimate = PointsEstimate()
         pose_estimate = PoseEstimate()
 
         # If we have an active map, track the frame using 2d-3d correspondences.
@@ -70,92 +72,108 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             corr_2d_2d = matcher.match_frame_to_frame(active_keyframe, tracking_frame)
 
             # Estimate pose from 2d-2d correspondences.
-            estimate = frame_to_frame_pose_estimator.estimate(corr_2d_2d)
+            init_pose_estimate = frame_to_frame_pose_estimator.estimate(corr_2d_2d)
 
-            if estimate.is_found():
+            if init_pose_estimate.is_found():
                 # Update frame poses with 2d-2d estimate (first camera is origin).
-                tracking_frame.pose_w_c = estimate.pose_1_2
+                tracking_frame.pose_w_c = init_pose_estimate.pose_1_2
 
                 # Compute an initial 3d map from the correspondences by using the epipolar geometry.
-                point_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate.inliers)
-                init_map = Map.create(active_keyframe, tracking_frame, point_estimate.valid_correspondences, point_estimate.world_points)
-
-                if init_map is not None:
-                    # FIXME: Add 3d vis
-                    # FIXME: Move to function in visualisation.py
-                    for pt1, pt2 in zip(estimate.inliers.points_1.astype(np.int32),
-                                        estimate.inliers.points_2.astype(np.int32)):
-                        cv2.line(ar_frame, pt1, pt2, (255, 0, 0))
-                        cv2.drawMarker(ar_frame, pt1, (255, 255, 255), cv2.MARKER_CROSS, 5)
-                        cv2.drawMarker(ar_frame, pt2, (255, 0, 255), cv2.MARKER_CROSS, 5)
+                init_point_estimate = init_points_estimator.estimate(active_keyframe, tracking_frame, init_pose_estimate.inliers)
 
         # Update Augmented Reality visualization.
-        ar_rendering, mask = ar_renderer.update(pose_estimate)
+        ar_rendering, mask = ar_renderer.update(tracking_frame)
         if ar_rendering is not None:
-            ar_frame[mask] = ar_rendering[mask]
+            ar_img[mask] = ar_rendering[mask]
 
-        # FIXME: Stuff below is for preliminary testing.
-        # FIXME: Add time, construct functions.
+        # Visualise detections according to state.
         if active_keyframe is None and active_map is None:
-            for kp in tracking_frame.keypoints:
-                cv2.drawMarker(ar_frame, tuple(map(round, kp.pt)), (255, 0, 255), cv2.MARKER_CROSS, 5)
-        elif active_map is not None and pose_estimate.is_found():
-            # Visualize tracking.
-            # FIXME: Move to function in visualisation.py
-            for pt in pose_estimate.image_inlier_points.astype(np.int32):
-                cv2.drawMarker(ar_frame, pt, (255, 0, 255), cv2.MARKER_CROSS, 5)
+            draw_detected_keypoints(ar_img, tracking_frame)
 
-        cv2.imshow("AR visualisation", ar_frame)
+        elif active_map is not None and pose_estimate.is_found():
+            draw_tracked_points(ar_img, pose_estimate.image_inlier_points)
+
+        elif active_map is None and active_keyframe is not None and init_pose_estimate.is_found():
+            draw_two_view_matching(ar_img, init_point_estimate.valid_correspondences)
+
+        # Display AR visualisation.
+        cv2.imshow("AR visualisation", ar_img)
         key = cv2.waitKey(10)
+
+        # Receive input from the keyboard.
         if key == ord('q'):
+            # Exit
             print("Bye")
             break
+
         elif key == ord('r'):
-            # Make all reference data empty.
+            # Reset lab.
             print("reset")
             active_keyframe = None
             active_map = None
             scene_3d.reset()
             ar_renderer.reset()
+
         elif key == ord(' '):
+            # Take action according to state.
+
             if active_keyframe is None:
-                print(f"set active keyframe")
+                print("Setting first keyframe")
                 active_keyframe = tracking_frame
 
                 active_keyframe.pose_w_c = SE3()
                 scene_3d.add_keyframe(active_keyframe)
                 ar_renderer.add_keyframe(active_keyframe)
+
             elif active_map is None:
-                print(f"set active map")
-                active_map = init_map
+                print("Creating initial map")
+
+                if not init_pose_estimate.is_found():
+                    print("--Initial relative pose not found, no map created")
+                    continue
+
+                point_estimate = points_estimator.estimate(active_keyframe, tracking_frame, init_pose_estimate.inliers)
+                active_map = Map.create(active_keyframe, tracking_frame, point_estimate.valid_correspondences, point_estimate.world_points)
+
                 scene_3d.add_point_cloud(active_map.world_points)
                 ar_renderer.set_current_point_cloud(active_map.world_points)
                 active_keyframe = active_map.frame_2
                 scene_3d.add_keyframe(active_keyframe)
                 ar_renderer.add_keyframe(active_keyframe)
+
             else:
+                print("Creating new map")
+
+                if not tracking_frame.has_pose():
+                    print("--Tracking frame pose not found, no map created")
+                    continue
+
                 # Add a new consecutive map as an odometry step.
-                if tracking_frame.pose_w_c is not None:
-                    #  Use 2d-2d pose estimator to extract inliers for map point triangulation.
-                    estimate = frame_to_frame_pose_estimator.estimate(
-                        matcher.match_frame_to_frame(active_keyframe, tracking_frame)
-                    )
+                # Use 2d-2d pose estimator to extract inliers for map point triangulation.
+                relative_pose_estimate = frame_to_frame_pose_estimator.estimate(
+                    matcher.match_frame_to_frame(active_keyframe, tracking_frame)
+                )
 
-                    # Try to create a new map based on the 2d-2d inliers.
-                    points_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate.inliers)
-                    new_map = Map.create(active_keyframe, tracking_frame, points_estimate.valid_correspondences, points_estimate.world_points)
+                if not relative_pose_estimate.is_found():
+                    print("--Could estimate relative pose with keyframe, no map created")
+                    continue
 
-                    # FIXME: i cpp har man if (new_map), men den kan ikke returnere nullptr? jo, kanskje når det ikke er solution
-                    if new_map is not None:
-                        active_map = new_map
-                        active_keyframe = tracking_frame
+                # Try to create a new map based on the 2d-2d inliers.
+                points_estimate = points_estimator.estimate(active_keyframe, tracking_frame, relative_pose_estimate.inliers)
 
-                        scene_3d.add_keyframe(active_keyframe)
-                        scene_3d.add_point_cloud(active_map.world_points)
-                        ar_renderer.add_keyframe(active_keyframe)
-                        ar_renderer.set_current_point_cloud(active_map.world_points)
-                    else:
-                        print(f"--Map creation failed")
+                if not points_estimate.is_found():
+                    print("--Could not triangulate points, no map created")
+                    continue
+
+                new_map = Map.create(active_keyframe, tracking_frame, points_estimate.valid_correspondences, points_estimate.world_points)
+
+                active_map = new_map
+                active_keyframe = tracking_frame
+
+                scene_3d.add_keyframe(active_keyframe)
+                scene_3d.add_point_cloud(active_map.world_points)
+                ar_renderer.add_keyframe(active_keyframe)
+                ar_renderer.set_current_point_cloud(active_map.world_points)
 
         do_exit = scene_3d.update(tracking_frame)
         if do_exit:
@@ -165,13 +183,12 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 class TwoViewRelativePoseEstimator:
     """Estimates the relative pose between to camera frames through epipolar geometry."""
 
-    def __init__(self, K: np.ndarray, max_epipolar_distance: float = 1.0):
+    def __init__(self, K: np.ndarray, max_epipolar_distance=3.0):
         """
         Constructor
 
         :param K: The intrinsic camera calibration matrix.
         """
-        # FIXME: Gjør i henhold til resten av poseestimatorene
         self._K = K
         self._max_epipolar_distance = max_epipolar_distance
 
@@ -186,7 +203,7 @@ class TwoViewRelativePoseEstimator:
         min_number_points = 3 * 5
 
         # Check that we have enough points.
-        if corr.size < min_number_points:
+        if corr.size() < min_number_points:
             return RelativePoseEstimate()
 
         # Get references to 2d-2d point correspondences
@@ -267,10 +284,11 @@ class DltPointsEstimator:
         proj_mat_1 = frame_1.camera_model.calibration_matrix @ frame_1.pose_w_c.inverse().to_matrix()[:3, :]
         proj_mat_2 = frame_2.camera_model.calibration_matrix @ frame_2.pose_w_c.inverse().to_matrix()[:3, :]
 
-        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, valid_corr.points_1.T, valid_corr.points_2.T) # FIXME: AttributeError: 'tuple' object has no attribute 'points_1'
+        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, valid_corr.points_1.T, valid_corr.points_2.T)
         x = hnormalized(x_hom)
 
         return PointsEstimate(x.T, valid_corr, valid_mask)
+
 
 def setup_camera_model_for_webcam():
     """Constructs the camera model according to the results from camera calibration"""

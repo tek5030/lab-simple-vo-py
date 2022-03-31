@@ -158,13 +158,13 @@ class ArRenderer:
             self._plotter.remove_actor(actor, render=False)
         self._point_cloud_actors = ()
 
-    def update(self, estimate: PoseEstimate):
+    def update(self, frame: Frame):
         """Updates the renderer with new camera pose estimate"""
 
-        if not estimate.is_found():
+        if not frame.has_pose():
             return None, None
 
-        self._plotter.camera.model_transform_matrix = estimate.pose_w_c.inverse().to_matrix()
+        self._plotter.camera.model_transform_matrix = frame.pose_w_c.inverse().to_matrix()
 
         _, ar_rendering = self._plotter.show(return_cpos=True, return_img=True, screenshot=True,
                                              interactive_update=True)
@@ -231,63 +231,18 @@ def add_frustum(plotter, pose_w_c, camera_model, image, scale=0.1):
     return frustum_actors
 
 
-def print_info_in_image(image: np.ndarray,
-                        estimate: PoseEstimate,
-                        matcing_time_ms: float,
-                        pose_est_time_ms: float,
-                        show_inliers=True):
-    """Prints results in the given image"""
-
-    font_face = cv2.FONT_HERSHEY_PLAIN
-    font_scale = 1.0
-    colour_red = (0, 0, 255)
-    colour_green = (0, 255, 0)
-
-    cv2.putText(image, f"Matching {round(matcing_time_ms)} ms", (10, 20), font_face, font_scale, colour_red)
-    cv2.putText(image, f"Pose est.: {round(pose_est_time_ms)} ms", (10, 40), font_face, font_scale, colour_red)
-
-    if not estimate.is_found():
-        return
-
-    t_cm = estimate.pose_w_c.translation.ravel() * 100.
-    cv2.putText(image, f"Pos: ({t_cm[0]:#0.1f}, {t_cm[1]:#0.1f}, {t_cm[2]:#0.1f}) cm",
-                (10, 60), font_face, font_scale, colour_green)
-
-    att_deg = attitude_from_rotation(estimate.pose_w_c.rotation.matrix)
-    cv2.putText(image, f"Att: ({att_deg[0]:#0.1f}, {att_deg[1]:#0.1f}, {att_deg[2]:#0.1f}) deg",
-                (10, 80), font_face, font_scale, colour_green)
-
-    if show_inliers:
-        for point in estimate.image_inlier_points:
-            cv2.drawMarker(image, point.astype(np.int32), colour_green, cv2.MARKER_CROSS, 5)
+def draw_detected_keypoints(vis_img, frame: Frame):
+    for kp in frame.keypoints:
+        cv2.drawMarker(vis_img, tuple(map(round, kp.pt)), (255, 0, 255), cv2.MARKER_CROSS, 5)
 
 
-def attitude_from_rotation(rot_mat: np.ndarray):
-    """Computes the rotations around the principal axes of a right-down-inwards coordinate system.
+def draw_tracked_points(vis_img, points: np.ndarray):
+    for pt in points.astype(np.int32):
+        cv2.drawMarker(vis_img, pt, (255, 0, 255), cv2.MARKER_CROSS, 5)
 
-    This does not really give us the attitude in the world coordinate system,
-    (which is right-up-outwards for visualisation reasons),
-    but anyway gives us an intuitive roll-pitch-yaw for getting a feel with the camera rotation measurements.
-    """
 
-    att = np.zeros(3)
-
-    if rot_mat[2, 0] < 1.:
-        if rot_mat[2, 0] > -1.:
-            att[1] = np.arcsin(-rot_mat[2, 0])
-            cos_y_inv = 1. / np.cos(att[1])
-            att[0] = np.arctan2(rot_mat[2, 1] * cos_y_inv, rot_mat[2, 2] * cos_y_inv)
-            att[2] = np.arctan2(rot_mat[1, 0] * cos_y_inv, rot_mat[0, 0] * cos_y_inv)
-        else:
-            att[0] = np.arctan2(-rot_mat[1, 2], rot_mat[1, 1])
-            att[1] = 0.5 * np.pi
-            att[2] = 0.
-    else:
-        att[0] = np.arctan2(-rot_mat[1, 2], rot_mat[1, 1])
-        att[1] = -0.5 * np.pi
-        att[2] = 0.
-
-    att *= 180. / np.pi
-    att[0] = np.fmod(360. + att[0], 360.) - 180.
-
-    return att
+def draw_two_view_matching(vis_img, correspondences):
+    for pt1, pt2 in zip(correspondences.points_1.astype(np.int32), correspondences.points_2.astype(np.int32)):
+        cv2.line(vis_img, pt1, pt2, (255, 0, 0))
+        cv2.drawMarker(vis_img, pt1, (255, 255, 255), cv2.MARKER_CROSS, 5)
+        cv2.drawMarker(vis_img, pt2, (255, 0, 255), cv2.MARKER_CROSS, 5)

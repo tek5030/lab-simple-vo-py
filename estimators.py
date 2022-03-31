@@ -29,18 +29,17 @@ class PoseEstimate:
 @dataclass
 class RelativePoseEstimate:
     """2D-2D pose estimation results"""
-    # FIXME: Lag i henhold til over, legg til dokumentasjon
+
     pose_1_2: SE3 = None
     inliers: FrameToFrameCorrespondences = None
     num_passed: int = 0
 
     def is_found(self):
-        return self.pose_1_2 is not None
+        return self.num_passed > 0
 
 
 @dataclass
 class PointsEstimate:
-    # FIXME: Lag i henhold til over, legg til dokumentasjon
     world_points: np.ndarray = np.array([], dtype=np.float32)
     valid_correspondences: FrameToFrameCorrespondences = None
     valid_mask: np.ndarray = np.array([], dtype=np.bool)
@@ -156,8 +155,6 @@ class SobaPointsEstimator:
         self._print_cost = print_cost
 
     def estimate(self, frame_1: Frame, frame_2: Frame, corr):
-        # FIXME: Implement FrameToFrameCorrespondences corr, PointsEstimate.
-
         # Get initial points estimate.
         estimate = self._initial_points_estimator.estimate(frame_1, frame_2, corr)
 
@@ -166,23 +163,26 @@ class SobaPointsEstimator:
 
         # Create measurement set for each camera.
         measurements = [
-            PrecalibratedCameraMeasurementsFixedCamera(frame_1.camera_model, frame_1.pose_w_c, corr.points_1.T), # FIXME: denne antar nx2, ikke 2xn
-            PrecalibratedCameraMeasurementsFixedCamera(frame_2.camera_model, frame_2.pose_w_c, corr.points_2.T)  # FIXME: denne antar nx2, ikke 2xn
+            PrecalibratedCameraMeasurementsFixedCamera(frame_1.camera_model, frame_1.pose_w_c, corr.points_1.T),
+            PrecalibratedCameraMeasurementsFixedCamera(frame_2.camera_model, frame_2.pose_w_c, corr.points_2.T)
             ]
 
         # Construct model from measurements.
         objective = PrecalibratedStructureOnlyBAObjective(measurements)
 
         # Set initial state.
-        # FIXME: NB: For this to work, world_points must be a list of 3D numpy arrays.
         init_state = CompositeStateVariable([point[:, np.newaxis] for point in estimate.world_points])
 
         # Optimize and update estimate.
-        states, cost, _, _ = levenberg_marquardt(init_state, objective)
-        estimate.world_points = np.concatenate(states[-1].variables, axis=1).T
+        try:
+            states, cost, _, _ = levenberg_marquardt(init_state, objective)
+            estimate.world_points = np.concatenate(states[-1].variables, axis=1).T
 
-        # Print cost.
-        if self._print_cost:
-            print(f"Structure only BA solved in {(len(cost) - 1):#2d} iterations, cost: {cost[0]:#f} -> {cost[-1]:#f}")
+            # Print cost.
+            if self._print_cost:
+                print(f"Structure only BA solved in {(len(cost) - 1):#2d} iterations, cost: {cost[0]:#f} -> {cost[-1]:#f}")
+        except np.linalg.LinAlgError:
+            print("SOBA failed!")
+            estimate = PointsEstimate()
 
         return estimate
