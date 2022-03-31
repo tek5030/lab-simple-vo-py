@@ -21,33 +21,59 @@ class Scene3D:
         self._do_exit = False
         self._current_camera_actors = ()
         self._keyframe_actors = ()
+        self._point_cloud_actors = ()
 
-        # Add scene origin and plane.
-        add_axis(self._plotter, SE3())
+        self._last_keyframe_position = None
 
         # Add callback for closing window.
         def exit_callback():
             self._do_exit = True
         self._plotter.add_key_event('q', exit_callback)
 
+        # Add callback for printing current camera.
+        def camera_callback():
+            print(self._plotter.camera)
+        self._plotter.add_key_event('c', camera_callback)
+
+        # Set camera.
+        self._plotter.camera.position = (1.15923, -1.11796, -5.18618)
+        self._plotter.camera.up = (0.0184248, -0.977167, 0.211671)
+        self._plotter.camera.focal_point = (0.398066, 0.0587764, 0.312404)
+
         # Show window.
         self._plotter.show(title="3D visualisation", interactive=True, interactive_update=True)
 
-    def _update_current_camera_visualisation(self, undistorted_frame, estimate: PoseEstimate):
+    def _update_current_camera_visualisation(self, frame: Frame):
         # Remove old visualisation.
         for actor in self._current_camera_actors:
             self._plotter.remove_actor(actor, render=False)
 
         # Render new visualisation.
-        if estimate.is_found():
+        if frame.pose_w_c is not None:
             self._current_camera_actors = \
-                add_frustum(self._plotter, estimate.pose_w_c, self._camera_model, undistorted_frame) + \
-                add_axis(self._plotter, estimate.pose_w_c)
+                add_frustum(self._plotter, frame.pose_w_c, self._camera_model, frame.colour_image) + \
+                add_axis(self._plotter, frame.pose_w_c)
 
     def add_keyframe(self, frame: Frame):
         self._keyframe_actors += \
-            add_frustum(self._plotter, frame.pose_w_c, frame.camera_model, frame.image) + \
+            add_frustum(self._plotter, frame.pose_w_c, frame.camera_model, frame.colour_image) + \
             add_axis(self._plotter, frame.pose_w_c)
+
+        current_keyframe_position = frame.pose_w_c.translation
+
+        if self._last_keyframe_position is not None:
+            line = pv.Line(self._last_keyframe_position.ravel(), current_keyframe_position.ravel())
+
+            self._keyframe_actors += \
+                (self._plotter.add_mesh(line, color='b'), )
+
+        self._last_keyframe_position = current_keyframe_position
+
+    def add_point_cloud(self, pts_3d: np.ndarray):
+        point_cloud = pv.PolyData(pts_3d)
+        point_cloud['Map number'] = len(self._point_cloud_actors) * np.ones(len(pts_3d))
+
+        self._point_cloud_actors += (self._plotter.add_mesh(point_cloud, render_points_as_spheres=True), )
 
     def reset(self):
         for actor in self._current_camera_actors:
@@ -58,10 +84,16 @@ class Scene3D:
             self._plotter.remove_actor(actor, render=False)
         self._keyframe_actors = ()
 
-    def update(self, undistorted_frame, estimate: PoseEstimate, time=10):
+        for actor in self._point_cloud_actors:
+            self._plotter.remove_actor(actor, render=False)
+        self._point_cloud_actors = ()
+
+        self._last_keyframe_position = None
+
+    def update(self, frame: Frame, time=10):
         """Updates the viewer with new camera frame"""
 
-        self._update_current_camera_visualisation(undistorted_frame, estimate)
+        self._update_current_camera_visualisation(frame)
         self._plotter.update(time)
         return self._do_exit
 
@@ -74,6 +106,7 @@ class ArRenderer:
 
         # Define tuple to hold keyframe actors.
         self._keyframe_actors = ()
+        self._point_cloud_actors = ()
 
         # Set up plotter.
         # Set hide_rendering=False to show a window with the 3D rendering.
@@ -105,10 +138,25 @@ class ArRenderer:
     def add_keyframe(self, frame: Frame):
         self._keyframe_actors += add_axis(self._plotter, frame.pose_w_c)
 
+    def set_current_point_cloud(self, pts_3d: np.ndarray):
+        for actor in self._point_cloud_actors:
+            self._plotter.remove_actor(actor, render=False)
+        self._point_cloud_actors = ()
+
+        point_cloud = pv.PolyData(pts_3d)
+        point_cloud['Depth'] = pts_3d[:, -1]
+
+        self._point_cloud_actors += (self._plotter.add_mesh(point_cloud, render_points_as_spheres=True), )
+        self._plotter.remove_scalar_bar(render=False)
+
     def reset(self):
         for actor in self._keyframe_actors:
             self._plotter.remove_actor(actor, render=False)
         self._keyframe_actors = ()
+
+        for actor in self._point_cloud_actors:
+            self._plotter.remove_actor(actor, render=False)
+        self._point_cloud_actors = ()
 
     def update(self, estimate: PoseEstimate):
         """Updates the renderer with new camera pose estimate"""

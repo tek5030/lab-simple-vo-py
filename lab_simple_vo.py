@@ -47,11 +47,7 @@ def run_simple_vo_lab(camera: CalibratedCamera):
         tracking_frame = frame_extractor.extract_frame()
 
         # Construct image for visualisation.
-        vis_img = tracking_frame.image
-
-        # Ensure that we can visualise using colours.
-        if vis_img.ndim != 3:
-            vis_img = cv2.cvtColor(vis_img, cv2.COLOR_GRAY2BGR)
+        ar_frame = tracking_frame.colour_image
 
         # FIXME: Dummy estimate.
         pose_estimate = PoseEstimate()
@@ -67,12 +63,6 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             if pose_estimate.is_found():
                 # update frame pose with 2d-3d estimate.
                 tracking_frame.pose_w_c = pose_estimate.pose_w_c
-
-                # Visualize tracking.
-                # FIXME: Add 3d vis
-                # FIXME: Move to function in visualisation.py
-                for pt in pose_estimate.image_inlier_points.astype(np.int32):
-                    cv2.drawMarker(vis_img, pt, (0, 0, 255), cv2.MARKER_CROSS, 5)
 
         # If we only have one active keyframe and no map,
         # visualise the map initialization from 2d-2d correspondences.
@@ -96,19 +86,25 @@ def run_simple_vo_lab(camera: CalibratedCamera):
                     # FIXME: Move to function in visualisation.py
                     for pt1, pt2 in zip(estimate.inliers.points_1.astype(np.int32),
                                         estimate.inliers.points_2.astype(np.int32)):
-                        cv2.line(vis_img, pt1, pt2, (255, 0, 0))
-                        cv2.drawMarker(vis_img, pt1, (255, 255, 255), cv2.MARKER_CROSS, 5)
-                        cv2.drawMarker(vis_img, pt2, (255, 0, 255), cv2.MARKER_CROSS, 5)
+                        cv2.line(ar_frame, pt1, pt2, (255, 0, 0))
+                        cv2.drawMarker(ar_frame, pt1, (255, 255, 255), cv2.MARKER_CROSS, 5)
+                        cv2.drawMarker(ar_frame, pt2, (255, 0, 255), cv2.MARKER_CROSS, 5)
 
         # Update Augmented Reality visualization.
-        ar_frame = vis_img
         ar_rendering, mask = ar_renderer.update(pose_estimate)
         if ar_rendering is not None:
             ar_frame[mask] = ar_rendering[mask]
 
         # FIXME: Stuff below is for preliminary testing.
+        # FIXME: Add time, construct functions.
         if active_keyframe is None and active_map is None:
-            ar_frame = cv2.drawKeypoints(ar_frame, tracking_frame.keypoints, outImage=None, color=(0, 255, 0))
+            for kp in tracking_frame.keypoints:
+                cv2.drawMarker(ar_frame, tuple(map(round, kp.pt)), (255, 0, 255), cv2.MARKER_CROSS, 5)
+        elif active_map is not None and pose_estimate.is_found():
+            # Visualize tracking.
+            # FIXME: Move to function in visualisation.py
+            for pt in pose_estimate.image_inlier_points.astype(np.int32):
+                cv2.drawMarker(ar_frame, pt, (255, 0, 255), cv2.MARKER_CROSS, 5)
 
         cv2.imshow("AR visualisation", ar_frame)
         key = cv2.waitKey(10)
@@ -133,7 +129,11 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             elif active_map is None:
                 print(f"set active map")
                 active_map = init_map
+                scene_3d.add_point_cloud(active_map.world_points)
+                ar_renderer.set_current_point_cloud(active_map.world_points)
                 active_keyframe = active_map.frame_2
+                scene_3d.add_keyframe(active_keyframe)
+                ar_renderer.add_keyframe(active_keyframe)
             else:
                 # Add a new consecutive map as an odometry step.
                 if tracking_frame.pose_w_c is not None:
@@ -152,12 +152,13 @@ def run_simple_vo_lab(camera: CalibratedCamera):
                         active_keyframe = tracking_frame
 
                         scene_3d.add_keyframe(active_keyframe)
+                        scene_3d.add_point_cloud(active_map.world_points)
                         ar_renderer.add_keyframe(active_keyframe)
-                        # FIXME scene_3d.add_map(new_map)
+                        ar_renderer.set_current_point_cloud(active_map.world_points)
                     else:
                         print(f"--Map creation failed")
 
-        do_exit = scene_3d.update(tracking_frame.image, pose_estimate)
+        do_exit = scene_3d.update(tracking_frame)
         if do_exit:
             break
 

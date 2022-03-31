@@ -187,6 +187,8 @@ class PerspectiveCamera:
 class Frame:
     # FIXME: Implement!
     def __init__(self, image: np.ndarray, camera_model: PerspectiveCamera, keypoints: tuple, descriptors: np.array):
+        self._gray_image = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        self._colour_image = image if image.ndim == 3 else cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
         self._image = image
         self._camera_model = camera_model
         self._keypoints = keypoints
@@ -194,8 +196,12 @@ class Frame:
         self._pose_w_c = None
 
     @property
-    def image(self):
-        return self._image.copy()
+    def gray_image(self):
+        return self._gray_image.copy()
+
+    @property
+    def colour_image(self):
+        return self._colour_image.copy()
 
     @property
     def camera_model(self):
@@ -338,7 +344,7 @@ class TrackingFrameExtractor:
         keypoints = sorted(keypoints, key=lambda x: x.response, reverse=True)
 
         num_to_retain = min(max_num, round(max_ratio * len(keypoints)))
-        return anms.ssc(keypoints, num_to_retain, tolerance, img_size.width, img_size.height)
+        return anms.ssc(keypoints, num_to_retain, tolerance, img_size.width, img_size.height) # FIXME: ZeroDivisionError: float division by zero
 
 
 class Matcher:
