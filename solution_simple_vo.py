@@ -9,7 +9,7 @@ from pylie import SO3, SE3
 from visualisation import (ArRenderer, Scene3D, draw_detected_keypoints, draw_tracked_points, draw_two_view_matching)
 
 
-def run_simple_vo_lab(camera: CalibratedCamera):
+def run_simple_vo_solution(camera: CalibratedCamera):
     # Create the 2d-2d relative pose estimator.
     # We will use this for map creation.
     frame_to_frame_pose_estimator = TwoViewRelativePoseEstimator(camera.camera_model.calibration_matrix)
@@ -214,7 +214,7 @@ class TwoViewRelativePoseEstimator:
         # TODO 2: Use cv2.findEssentialMat() to get an inlier mask for the correspondences. Use self._max_epipolar_distance!
         # Find inliers with the 5-point algorithm
         p = 0.99
-        _, mask = (None, corr.points_index_1 > 0)      # Dummy, replace!
+        _, mask = cv2.findEssentialMat(points_2, points_1, self._K, method=cv2.RANSAC, prob=p, threshold=self._max_epipolar_distance)
         mask = mask.ravel().astype(bool)
 
         # Extract inlier correspondences by using inlier mask.
@@ -228,15 +228,15 @@ class TwoViewRelativePoseEstimator:
 
         # TODO 3: Compute the fundamental matrix from the entire inlier set using cv2.findFundamentalMat()
         # Compute Fundamental Matrix from all inliers.
-        F = np.zeros([3, 3])        # Dummy, replace!
+        F, _ = cv2.findFundamentalMat(inlier_points_2, inlier_points_1, cv2.FM_8POINT)
 
         # TODO 4: Compute the essential matrix from the fundamental matrix.
         # Compute Essential Matrix from Fundamental matrix.
-        E = np.zeros([3, 3])        # Dummy, replace!
+        E = self._K.T @ F @ self._K
 
         # TODO 5: Estimate pose from the essential matrix with cv2.recoverPose().
         # Recover pose from Essential Matrix.
-        num_pass_check, R, t, mask = (0, np.identity(3), np.zeros([3, 1]), inlier_points_1 > 0)     # Dummy, replace!
+        num_pass_check, R, t, mask = cv2.recoverPose(E, inlier_points_2, inlier_points_1, self._K)
 
         if num_pass_check < min_number_points:
             return RelativePoseEstimate()
@@ -267,7 +267,14 @@ class DltPointsEstimator:
 
     def _compute_disparity_mask(self, frame_1: Frame, frame_2: Frame, corr):
         # TODO 6: Compute disparities in the general two-view case.
-        disparities = np.zeros(corr.size())                 # Dummy, replace
+        R_1_2 = (frame_1.pose_w_c.rotation.inverse() @ frame_2.pose_w_c.rotation).matrix
+
+        H_1_2 = frame_1.camera_model.calibration_matrix @ \
+                R_1_2 @ \
+                np.linalg.inv(frame_2.camera_model.calibration_matrix)
+
+        u_1_inf = hnormalized(H_1_2 @ homogeneous(corr.points_2.T))
+        disparities = np.linalg.norm(corr.points_1.T - u_1_inf, axis=0)
 
         return disparities >= self._min_disparity
 
@@ -282,7 +289,11 @@ class DltPointsEstimator:
         )
 
         # TODO 7: Triangulate points.
-        x = np.array([])                                    # Dummy, replace
+        proj_mat_1 = frame_1.camera_model.calibration_matrix @ frame_1.pose_w_c.inverse().to_matrix()[:3, :]
+        proj_mat_2 = frame_2.camera_model.calibration_matrix @ frame_2.pose_w_c.inverse().to_matrix()[:3, :]
+
+        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, valid_corr.points_1.T, valid_corr.points_2.T)
+        x = hnormalized(x_hom)
 
         return PointsEstimate(x.T, valid_corr, valid_mask)
 
@@ -310,4 +321,4 @@ def setup_camera_model_for_webcam():
 if __name__ == "__main__":
     # TODO 1: Choose camera.
     video_source = 0
-    run_simple_vo_lab(CalibratedWebCamera(setup_camera_model_for_webcam(), video_source))
+    run_simple_vo_solution(CalibratedWebCamera(setup_camera_model_for_webcam(), video_source))
