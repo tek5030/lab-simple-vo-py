@@ -46,7 +46,7 @@ class PointsEstimate:
     valid_mask: np.ndarray = np.array([], dtype=np.bool)
 
     def is_found(self):
-        return self.world_points.ndim and self.world_points.shape[1] > 0
+        return self.world_points.ndim == 2 and self.world_points.shape[1] > 0
 
 
 class PnPPoseEstimator:
@@ -167,7 +167,7 @@ class SobaPointsEstimator:
         # Create measurement set for each camera.
         measurements = [
             PrecalibratedCameraMeasurementsFixedCamera(frame_1.camera_model, frame_1.pose_w_c, corr.points_1.T), # FIXME: denne antar nx2, ikke 2xn
-            PrecalibratedCameraMeasurementsFixedCamera(frame_2.camera_model, frame_2.pose_w_c, corr.points_1.T)  # FIXME: denne antar nx2, ikke 2xn
+            PrecalibratedCameraMeasurementsFixedCamera(frame_2.camera_model, frame_2.pose_w_c, corr.points_2.T)  # FIXME: denne antar nx2, ikke 2xn
             ]
 
         # Construct model from measurements.
@@ -175,11 +175,11 @@ class SobaPointsEstimator:
 
         # Set initial state.
         # FIXME: NB: For this to work, world_points must be a list of 3D numpy arrays.
-        init_state = CompositeStateVariable(estimate.world_points)
+        init_state = CompositeStateVariable([point[:, np.newaxis] for point in estimate.world_points])
 
         # Optimize and update estimate.
         states, cost, _, _ = levenberg_marquardt(init_state, objective)
-        estimate.world_points = states[-1].variables
+        estimate.world_points = np.concatenate(states[-1].variables, axis=1).T
 
         # Print cost.
         if self._print_cost:

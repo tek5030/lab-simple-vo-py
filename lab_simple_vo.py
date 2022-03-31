@@ -18,12 +18,11 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 
     # Create points estimator.
     # We will use this estimator to triangulate points.
-    points_estimator = DltPointsEstimator()
-    # FIXME: Finish soba!
-    # points_estimator = SobaPointsEstimator(init_points_estimator)
+    init_points_estimator = DltPointsEstimator()
+    points_estimator = SobaPointsEstimator(init_points_estimator)
 
     # Set up keypoint detector and descriptor extractor for correspondence matching.
-    detector = cv2.FastFeatureDetector_create()
+    detector = cv2.ORB_create(nfeatures=3000, fastThreshold=10)
     desc_extractor = cv2.ORB_create()
     frame_extractor = TrackingFrameExtractor(camera, detector, desc_extractor)
     matcher = Matcher(desc_extractor.defaultNorm())
@@ -144,7 +143,7 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 
                     # Try to create a new map based on the 2d-2d inliers.
                     points_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate.inliers)
-                    new_map = Map.create(active_keyframe, tracking_frame, estimate.inliers, points_estimate.world_points)
+                    new_map = Map.create(active_keyframe, tracking_frame, points_estimate.valid_correspondences, points_estimate.world_points)
 
                     # FIXME: i cpp har man if (new_map), men den kan ikke returnere nullptr? jo, kanskje når det ikke er solution
                     if new_map is not None:

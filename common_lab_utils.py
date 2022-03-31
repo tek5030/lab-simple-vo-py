@@ -233,8 +233,7 @@ class Map:
 
     @classmethod
     def create(cls, frame_1: Frame, frame_2: Frame, corr: FrameToFrameCorrespondences, world_points: np.ndarray):
-        # Add descriptors from both frames.
-        world_descriptors = np.r_[frame_1.descriptors[corr.points_index_1], frame_2.descriptors[corr.points_index_2, :]]
+        world_descriptors = frame_2.descriptors[corr.points_index_2, :]
         return cls(frame_1, frame_2, world_points, world_descriptors)
 
 
@@ -354,8 +353,7 @@ class Matcher:
         self._max_ratio = max_ratio
 
     def match_frame_to_frame(self, frame_1: Frame, frame_2: Frame) -> FrameToFrameCorrespondences:
-        k = 2
-        matches = self._matcher.knnMatch(frame_2.descriptors, frame_1.descriptors, k)
+        matches = self._matcher.knnMatch(frame_2.descriptors, frame_1.descriptors, k=2)
         good_matches = extract_good_ratio_matches(matches, self._max_ratio)
 
         point_index_1 = [m.trainIdx for m in good_matches]
@@ -376,9 +374,7 @@ class Matcher:
         matches = self._matcher.knnMatch(frame.descriptors, active_map.world_descriptors, k=2)
         good_matches = extract_good_ratio_matches(matches, self._max_ratio)
 
-        # There are two descriptors for each point.
-        num_points = len(active_map.world_points)
-        map_ind = [m.trainIdx % num_points for m in good_matches]
+        map_ind = [m.trainIdx for m in good_matches]
         map_points = active_map.world_points[map_ind]
 
         frame_ind = [m.queryIdx for m in good_matches]
