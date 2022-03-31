@@ -1,6 +1,6 @@
 https://github.com/tussedrotten/pylie/archive/v0.4.1.zip
 numpy
 opencv-python
-pyrealsense2
 pyvista
 scipy
+vtk @ file://${PWD}/vtk-9.0.1-cp38-cp38-linux_aarch64.whl
