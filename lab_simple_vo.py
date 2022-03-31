@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Frame, Map, Size, PerspectiveCamera, TrackingFrameExtractor, Matcher, FrameToFrameCorrespondences)
+from common_lab_utils import (CalibratedCamera, CalibratedRealSenseCamera, CalibratedWebCamera, Frame, Map, Size, PerspectiveCamera, TrackingFrameExtractor, Matcher, FrameToFrameCorrespondences, homogeneous, hnormalized)
 from estimators import (PnPPoseEstimator, MobaPoseEstimator, PoseEstimate, SobaPointsEstimator, PointsEstimate, RelativePoseEstimate)
 from pylie import SO3, SE3
 from visualisation import (ArRenderer, Scene3D, print_info_in_image)
@@ -78,8 +78,8 @@ def run_simple_vo_lab(camera: CalibratedCamera):
                 tracking_frame.pose_w_c = estimate.pose_1_2
 
                 # Compute an initial 3d map from the correspondences by using the epipolar geometry.
-                init_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate.inliers)
-                init_map = Map.create(active_keyframe, tracking_frame, estimate.inliers, init_estimate.world_points)
+                point_estimate = points_estimator.estimate(active_keyframe, tracking_frame, estimate.inliers)
+                init_map = Map.create(active_keyframe, tracking_frame, point_estimate.valid_correspondences, point_estimate.world_points)
 
                 if init_map is not None:
                     # FIXME: Add 3d vis
@@ -241,15 +241,37 @@ class TwoViewRelativePoseEstimator:
 
 class DltPointsEstimator:
     """Points estimator based on the DLT triangulation algorithm."""
+    def __init__(self, min_disparity=5.):
+        self._min_disparity = min_disparity
+
+    def _compute_disparity_mask(self, frame_1: Frame, frame_2: Frame, corr):
+        R_1_2 = (frame_1.pose_w_c.rotation.inverse() @ frame_2.pose_w_c.rotation).matrix
+
+        trans_norm_rot_only_1_2 = frame_1.camera_model.calibration_matrix @ \
+                                  R_1_2 @ \
+                                  np.linalg.inv(frame_2.camera_model.calibration_matrix)
+        u_1_inf = hnormalized(trans_norm_rot_only_1_2 @ homogeneous(corr.points_2.T))
+        disparities = np.linalg.norm(corr.points_1.T - u_1_inf, axis=0)
+
+        return disparities >= self._min_disparity
 
     def estimate(self, frame_1: Frame, frame_2: Frame, corr):
+        valid_mask = self._compute_disparity_mask(frame_1, frame_2, corr)
+
+        valid_corr = FrameToFrameCorrespondences(
+            corr.points_1[valid_mask],
+            corr.points_2[valid_mask],
+            corr.points_index_1[valid_mask],
+            corr.points_index_2[valid_mask]
+        )
+
         proj_mat_1 = frame_1.camera_model.calibration_matrix @ frame_1.pose_w_c.inverse().to_matrix()[:3, :]
         proj_mat_2 = frame_2.camera_model.calibration_matrix @ frame_2.pose_w_c.inverse().to_matrix()[:3, :]
 
-        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, corr.points_1.T, corr.points_2.T) # FIXME: AttributeError: 'tuple' object has no attribute 'points_1'
-        x = x_hom[0:-1, :] / x_hom[-1, :]
+        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, valid_corr.points_1.T, valid_corr.points_2.T) # FIXME: AttributeError: 'tuple' object has no attribute 'points_1'
+        x = hnormalized(x_hom)
 
-        return PointsEstimate(x.T)
+        return PointsEstimate(x.T, valid_corr, valid_mask)
 
 def setup_camera_model_for_webcam():
     """Constructs the camera model according to the results from camera calibration"""

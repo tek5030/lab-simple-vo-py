@@ -31,7 +31,7 @@ class RelativePoseEstimate:
     """2D-2D pose estimation results"""
     # FIXME: Lag i henhold til over, legg til dokumentasjon
     pose_1_2: SE3 = None
-    inliers: FrameToFrameCorrespondences = ()
+    inliers: FrameToFrameCorrespondences = None
     num_passed: int = 0
 
     def is_found(self):
@@ -42,6 +42,8 @@ class RelativePoseEstimate:
 class PointsEstimate:
     # FIXME: Lag i henhold til over, legg til dokumentasjon
     world_points: np.ndarray = np.array([], dtype=np.float32)
+    valid_correspondences: FrameToFrameCorrespondences = None
+    valid_mask: np.ndarray = np.array([], dtype=np.bool)
 
     def is_found(self):
         return self.world_points.ndim and self.world_points.shape[1] > 0
