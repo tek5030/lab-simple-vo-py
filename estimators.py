@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from pylie import SO3, SE3
 from dataclasses import dataclass
-from common_lab_utils import (Frame, PerspectiveCamera, PointsEstimate)
+from common_lab_utils import (Frame, PerspectiveCamera, FrameToFrameCorrespondences)
 from bundle_adjustment import (PrecalibratedCameraMeasurementsFixedWorld,
                                PrecalibratedMotionOnlyBAObjective,
                                PrecalibratedCameraMeasurementsFixedCamera,
@@ -14,7 +14,7 @@ from bundle_adjustment import (PrecalibratedCameraMeasurementsFixedWorld,
 
 @dataclass
 class PoseEstimate:
-    """3D-2D pose estimation results"""
+    """2D-3D pose estimation results"""
     pose_w_c: SE3 = None                        # Camera pose in the world.
     image_inlier_points: np.ndarray = None      # 2D inlier image points.
     world_inlier_points: np.ndarray = None      # 3D inlier world points.
@@ -24,6 +24,27 @@ class PoseEstimate:
         :return: True if result was found.
         """
         return self.pose_w_c is not None
+
+
+@dataclass
+class RelativePoseEstimate:
+    """2D-2D pose estimation results"""
+    # FIXME: Lag i henhold til over, legg til dokumentasjon
+    pose_1_2: SE3 = None
+    inliers: FrameToFrameCorrespondences = ()
+    num_passed: int = 0
+
+    def is_found(self):
+        return self.pose_1_2 is not None
+
+
+@dataclass
+class PointsEstimate:
+    # FIXME: Lag i henhold til over, legg til dokumentasjon
+    world_points: np.ndarray = np.array([], dtype=np.float32)
+
+    def is_found(self):
+        return self.world_points.ndim and self.world_points.shape[1] > 0
 
 
 class PnPPoseEstimator:

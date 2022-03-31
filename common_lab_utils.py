@@ -26,14 +26,6 @@ class Size:
 
 
 @dataclass
-class PointsEstimate:
-    world_points: np.ndarray = np.array([], dtype=np.float32)
-
-    def is_found(self):
-        return self.world_points.ndim and self.world_points.shape[1] > 0
-
-
-@dataclass
 class FrameToFrameCorrespondences:
     points_1: np.array([], dtype=np.float32)
     points_2: np.array([], dtype=np.float32)
@@ -55,22 +47,6 @@ class MapToFrameCorrespondences:
     @property
     def size(self):
         return len(self.map_points)  # FIXME: riktig dimensjon
-
-
-@dataclass
-class RelativePoseEstimate:
-    R: np.ndarray = np.eye(3, dtype=np.float32)
-    t: np.ndarray = np.zeros(3, dtype=np.float32)
-    inliers: FrameToFrameCorrespondences = ()
-    num_passed: int = 0
-
-    @property
-    def pose(self):
-        return SE3((SO3(self.R), self.t))
-
-    @property
-    def is_found(self):
-        return self.num_passed > 0
 
 
 def homogeneous(x):
@@ -175,6 +151,21 @@ class PerspectiveCamera:
 
         return np.array([[-d, 0, d * xn[0], xn[0] * xn[1], -1 - xn[0] ** 2, xn[1]],
                          [0, -d, d * xn[1], 1 + xn[1] ** 2, -xn[0] * xn[1], -xn[0]]])
+
+    @staticmethod
+    def jac_project_normalised_wrt_x_c(x_c: np.ndarray):
+        """Computes the Jacobian for the projection of a point in the camera coordinate system to normalised coordinates wrt the point"""
+        x_c = x_c.flatten()
+        d = 1 / x_c[-1]
+        xn = d * x_c
+
+        return np.array([[d, 0, -d * xn[0]],
+                         [0, d, -d * xn[1]]])
+
+    @classmethod
+    def jac_project_world_to_normalised_wrt_x_w(cls, pose_c_w: SE3, x_w: np.ndarray):
+        """Computes the Jacobian for the projection of a point in the world coordinate system to normalised coordinates wrt the point"""
+        return cls.jac_project_normalised_wrt_x_c(pose_c_w * x_w) @ pose_c_w.jac_action_Xx_wrt_x()
 
     @staticmethod
     def project_to_normalised_3d(x_c: np.ndarray):
@@ -329,10 +320,10 @@ class TrackingFrameExtractor:
         self._use_anms = use_anms
 
     def extract_frame(self) -> Frame:
-        undistorted_frame = self._camera.capture_undistorted_frame()
+        undist_frame = self._camera.capture_undistorted_frame()
 
         # Detect and describe features.
-        gray_frame = cv2.cvtColor(undistorted_frame, cv2.COLOR_BGR2GRAY)
+        gray_frame = undist_frame if undist_frame.ndim == 2 else cv2.cvtColor(undist_frame, cv2.COLOR_BGR2GRAY)
         keypoints = self._detector.detect(gray_frame)
 
         if self._use_anms:
@@ -340,7 +331,7 @@ class TrackingFrameExtractor:
 
         keypoints, descriptors = self._desc_extractor.compute(gray_frame, keypoints)
 
-        return Frame(undistorted_frame, self._camera.camera_model, keypoints, descriptors)
+        return Frame(undist_frame, self._camera.camera_model, keypoints, descriptors)
 
     @staticmethod
     def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=1000, max_ratio=0.7, tolerance=0.1):
@@ -379,7 +370,7 @@ class Matcher:
         good_matches = extract_good_ratio_matches(matches, self._max_ratio)
 
         map_ind = [m.trainIdx for m in good_matches]
-        map_points = [k.pt for k in np.asarray(active_map.world_points[map_ind])]
+        map_points = [k.pt for k in np.asarray(active_map.world_points[map_ind])] # FIXME: IndexError: index 6 is out of bounds for axis 0 with size 3
 
         frame_ind = [m.queryIdx for m in good_matches]
         frame_points = [k.pt for k in frame.keypoints[frame_ind]]

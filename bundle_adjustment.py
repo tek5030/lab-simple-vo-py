@@ -120,8 +120,7 @@ class PrecalibratedStructureOnlyBAObjective:
         :param measurement: The measurement
         :return: The measurement Jacobian
         """
-        A = measurement.sqrt_inv_covs[point_index] @ \
-            measurement.camera.jac_project_world_to_normalised_wrt_x_w(measurement.pose_c_w, point_state_w)
+        A = measurement.camera.jac_project_world_to_normalised_wrt_x_w(measurement.pose_c_w, point_state_w)
 
         return A
 
@@ -134,8 +133,7 @@ class PrecalibratedStructureOnlyBAObjective:
         :param measurement: The measurement
         :return: The measurement error
         """
-        b = measurement.sqrt_inv_covs[point_index] @ \
-            measurement.camera.reprojection_error_normalised(measurement.pose_c_w * point_state_w,
+        b = measurement.camera.reprojection_error_normalised(measurement.pose_c_w * point_state_w,
                                                              measurement.xn[:, [point_index]])
 
         return b
