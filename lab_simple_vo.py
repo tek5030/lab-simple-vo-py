@@ -13,7 +13,7 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 
     # Create the 2d-3d pose estimator.
     # We will use this to navigate in maps between keyframes.
-    init_pose_estimator = PnPPoseEstimator(camera.camera_model, do_iterative_estimation=False)
+    init_pose_estimator = PnPPoseEstimator(camera.camera_model)
     pose_estimator = MobaPoseEstimator(init_pose_estimator, camera.camera_model)
 
     # Create points estimator.
@@ -53,21 +53,26 @@ def run_simple_vo_lab(camera: CalibratedCamera):
         if vis_img.ndim != 3:
             vis_img = cv2.cvtColor(vis_img, cv2.COLOR_GRAY2BGR)
 
+        # FIXME: Dummy estimate.
+        pose_estimate = PoseEstimate()
+
         # If we have an active map, track the frame using 2d-3d correspondences.
         if active_map is not None:
             # Compute 2d-3d correspondences.
             corr_2d_3d = matcher.match_map_to_frame(active_map, tracking_frame)
 
             # Estimate pose from 2d-3d correspondences.
-            estimate = pose_estimator.estimate(corr_2d_3d.frame_points, corr_2d_3d.map_points)
+            pose_estimate = pose_estimator.estimate(corr_2d_3d.frame_points, corr_2d_3d.map_points)
 
-            if estimate.is_found:
+            if pose_estimate.is_found():
                 # update frame pose with 2d-3d estimate.
-                tracking_frame.pose_w_c = estimate.pose
+                tracking_frame.pose_w_c = pose_estimate.pose_w_c
 
                 # Visualize tracking.
-                # FIXME
-                pass
+                # FIXME: Add 3d vis
+                # FIXME: Move to function in visualisation.py
+                for pt in pose_estimate.image_inlier_points.astype(np.int32):
+                    cv2.drawMarker(vis_img, pt, (0, 0, 255), cv2.MARKER_CROSS, 5)
 
         # If we only have one active keyframe and no map,
         # visualise the map initialization from 2d-2d correspondences.
@@ -80,7 +85,6 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 
             if estimate.is_found():
                 # Update frame poses with 2d-2d estimate (first camera is origin).
-                active_keyframe.pose_w_c = SE3()
                 tracking_frame.pose_w_c = estimate.pose_1_2
 
                 # Compute an initial 3d map from the correspondences by using the epipolar geometry.
@@ -88,14 +92,13 @@ def run_simple_vo_lab(camera: CalibratedCamera):
                 init_map = Map.create(active_keyframe, tracking_frame, estimate.inliers, init_estimate.world_points)
 
                 if init_map is not None:
+                    # FIXME: Add 3d vis
                     # FIXME: Move to function in visualisation.py
-                    for pt1, pt2 in zip(estimate.inliers.points_1.astype(np.int32), estimate.inliers.points_2.astype(np.int32)):
+                    for pt1, pt2 in zip(estimate.inliers.points_1.astype(np.int32),
+                                        estimate.inliers.points_2.astype(np.int32)):
                         cv2.line(vis_img, pt1, pt2, (255, 0, 0))
                         cv2.drawMarker(vis_img, pt1, (255, 255, 255), cv2.MARKER_CROSS, 5)
                         cv2.drawMarker(vis_img, pt2, (255, 0, 255), cv2.MARKER_CROSS, 5)
-
-        # FIXME: Dummy estimate.
-        pose_estimate = PoseEstimate()
 
         # Update Augmented Reality visualization.
         ar_frame = vis_img
@@ -104,7 +107,8 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             ar_frame[mask] = ar_rendering[mask]
 
         # FIXME: Stuff below is for preliminary testing.
-        ar_frame = cv2.drawKeypoints(ar_frame, tracking_frame.keypoints, outImage=None, color=(0, 255, 0))
+        if active_keyframe is None and active_map is None:
+            ar_frame = cv2.drawKeypoints(ar_frame, tracking_frame.keypoints, outImage=None, color=(0, 255, 0))
 
         cv2.imshow("AR visualisation", ar_frame)
         key = cv2.waitKey(10)
@@ -116,11 +120,16 @@ def run_simple_vo_lab(camera: CalibratedCamera):
             print("reset")
             active_keyframe = None
             active_map = None
-            scene_3d = Scene3D(camera.camera_model)  # FIXME: scene_3d.reset()
+            scene_3d.reset()
+            ar_renderer.reset()
         elif key == ord(' '):
             if active_keyframe is None:
                 print(f"set active keyframe")
                 active_keyframe = tracking_frame
+
+                active_keyframe.pose_w_c = SE3()
+                scene_3d.add_keyframe(active_keyframe)
+                ar_renderer.add_keyframe(active_keyframe)
             elif active_map is None:
                 print(f"set active map")
                 active_map = init_map
@@ -141,7 +150,12 @@ def run_simple_vo_lab(camera: CalibratedCamera):
                     if new_map is not None:
                         active_map = new_map
                         active_keyframe = tracking_frame
+
+                        scene_3d.add_keyframe(active_keyframe)
+                        ar_renderer.add_keyframe(active_keyframe)
                         # FIXME scene_3d.add_map(new_map)
+                    else:
+                        print(f"--Map creation failed")
 
         do_exit = scene_3d.update(tracking_frame.image, pose_estimate)
         if do_exit:
@@ -231,10 +245,10 @@ class DltPointsEstimator:
         proj_mat_1 = frame_1.camera_model.calibration_matrix @ frame_1.pose_w_c.inverse().to_matrix()[:3, :]
         proj_mat_2 = frame_2.camera_model.calibration_matrix @ frame_2.pose_w_c.inverse().to_matrix()[:3, :]
 
-        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, corr.points_1.T, corr.points_2.T)
+        x_hom = cv2.triangulatePoints(proj_mat_1, proj_mat_2, corr.points_1.T, corr.points_2.T) # FIXME: AttributeError: 'tuple' object has no attribute 'points_1'
         x = x_hom[0:-1, :] / x_hom[-1, :]
 
-        return PointsEstimate(x)
+        return PointsEstimate(x.T)
 
 def setup_camera_model_for_webcam():
     """Constructs the camera model according to the results from camera calibration"""

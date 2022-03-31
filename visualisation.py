@@ -2,7 +2,7 @@ import numpy as np
 import pyvista as pv
 import cv2
 from pylie import SE3
-from common_lab_utils import PerspectiveCamera
+from common_lab_utils import PerspectiveCamera, Frame
 from estimators import PoseEstimate
 
 
@@ -18,8 +18,12 @@ class Scene3D:
         self._camera_model = camera_model
         self._plotter = pv.Plotter()
 
+        self._do_exit = False
+        self._current_camera_actors = ()
+        self._keyframe_actors = ()
+
         # Add scene origin and plane.
-        add_axis(self._plotter, SE3(), 1.0)
+        add_axis(self._plotter, SE3())
 
         # Add callback for closing window.
         def exit_callback():
@@ -38,7 +42,21 @@ class Scene3D:
         if estimate.is_found():
             self._current_camera_actors = \
                 add_frustum(self._plotter, estimate.pose_w_c, self._camera_model, undistorted_frame) + \
-                add_axis(self._plotter, estimate.pose_w_c, 0.1)
+                add_axis(self._plotter, estimate.pose_w_c)
+
+    def add_keyframe(self, frame: Frame):
+        self._keyframe_actors += \
+            add_frustum(self._plotter, frame.pose_w_c, frame.camera_model, frame.image) + \
+            add_axis(self._plotter, frame.pose_w_c)
+
+    def reset(self):
+        for actor in self._current_camera_actors:
+            self._plotter.remove_actor(actor, render=False)
+        self._current_camera_actors = ()
+
+        for actor in self._keyframe_actors:
+            self._plotter.remove_actor(actor, render=False)
+        self._keyframe_actors = ()
 
     def update(self, undistorted_frame, estimate: PoseEstimate, time=10):
         """Updates the viewer with new camera frame"""
@@ -53,6 +71,9 @@ class ArRenderer:
 
     def __init__(self, camera_model: PerspectiveCamera, hide_rendering=True):
         """Sets up the 3D viewer"""
+
+        # Define tuple to hold keyframe actors.
+        self._keyframe_actors = ()
 
         # Set up plotter.
         # Set hide_rendering=False to show a window with the 3D rendering.
@@ -77,16 +98,17 @@ class ArRenderer:
         view_angle = 180.0 / np.pi * (2.0 * np.arctan2(img_height / 2.0, f_v))
         self._plotter.camera.view_angle = view_angle
 
-        # Add AR object.
-        # Add your own objects if you want to!
-        add_axis(self._plotter, SE3(), 1.0)
-
-        # Add a light
-        self._plotter.add_light(pv.Light(light_type='scene light', position=(0, 0, 5)))
-
         # Show window.
         self._plotter.show(title="AR visualisation", window_size=[img_width, img_height],
                            interactive=False, interactive_update=True)
+
+    def add_keyframe(self, frame: Frame):
+        self._keyframe_actors += add_axis(self._plotter, frame.pose_w_c)
+
+    def reset(self):
+        for actor in self._keyframe_actors:
+            self._plotter.remove_actor(actor, render=False)
+        self._keyframe_actors = ()
 
     def update(self, estimate: PoseEstimate):
         """Updates the renderer with new camera pose estimate"""
@@ -104,7 +126,7 @@ class ArRenderer:
         return ar_rendering_bgr, foreground_mask
 
 
-def add_axis(plotter, pose: SE3, scale=10.0):
+def add_axis(plotter, pose: SE3, scale=0.1):
     """Adds a 3D axis object to the pyvista plotter"""
 
     T = pose.to_matrix()
@@ -156,7 +178,7 @@ def add_frustum(plotter, pose_w_c, camera_model, image, scale=0.1):
 
     frustum_actors = (
         plotter.add_mesh(pyramid, show_edges=True, style='wireframe', render=False),
-        plotter.add_mesh(rectangle, texture=tex, opacity=0.9, render=False)
+        plotter.add_mesh(rectangle, texture=tex, opacity=0.6, render=False)
     )
     return frustum_actors
 

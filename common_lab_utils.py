@@ -41,8 +41,8 @@ class FrameToFrameCorrespondences:
 class MapToFrameCorrespondences:
     map_points: np.ndarray
     frame_points: np.ndarray
-    map_point_indices: np.ndarray
-    frame_point_indices: np.ndarray
+    map_point_indices: list
+    frame_point_indices: list
 
     @property
     def size(self):
@@ -186,7 +186,7 @@ class PerspectiveCamera:
 
 class Frame:
     # FIXME: Implement!
-    def __init__(self, image: np.ndarray, camera_model: PerspectiveCamera, keypoints, descriptors):
+    def __init__(self, image: np.ndarray, camera_model: PerspectiveCamera, keypoints: tuple, descriptors: np.array):
         self._image = image
         self._camera_model = camera_model
         self._keypoints = keypoints
@@ -334,7 +334,7 @@ class TrackingFrameExtractor:
         return Frame(undist_frame, self._camera.camera_model, keypoints, descriptors)
 
     @staticmethod
-    def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=1000, max_ratio=0.7, tolerance=0.1):
+    def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=2000, max_ratio=0.7, tolerance=0.1):
         keypoints = sorted(keypoints, key=lambda x: x.response, reverse=True)
 
         num_to_retain = min(max_num, round(max_ratio * len(keypoints)))
@@ -370,9 +370,9 @@ class Matcher:
         good_matches = extract_good_ratio_matches(matches, self._max_ratio)
 
         map_ind = [m.trainIdx for m in good_matches]
-        map_points = [k.pt for k in np.asarray(active_map.world_points[map_ind])] # FIXME: IndexError: index 6 is out of bounds for axis 0 with size 3
+        map_points = active_map.world_points[map_ind]
 
         frame_ind = [m.queryIdx for m in good_matches]
-        frame_points = [k.pt for k in frame.keypoints[frame_ind]]
+        frame_points = np.array([frame.keypoints[i].pt for i in frame_ind])
 
         return MapToFrameCorrespondences(map_points, frame_points, map_ind, frame_ind)

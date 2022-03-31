@@ -76,9 +76,9 @@ class PnPPoseEstimator:
 
         # Find inliers and compute initial pose with RANSAC.
         retval, rvec, tvec, inliers = cv2.solvePnPRansac(world_points, image_points, self._calibration_matrix, (),
-                                                         useExtrinsicGuess=False, iterationsCount=10000,
+                                                         useExtrinsicGuess=False, iterationsCount=100,
                                                          reprojectionError=2.0, confidence=0.99,
-                                                         flags=cv2.SOLVEPNP_AP3P)
+                                                         flags=cv2.SOLVEPNP_P3P)
 
         # Check that we have a valid result and enough inliers.
         if not retval or len(inliers) < min_number_points:
@@ -107,7 +107,7 @@ class MobaPoseEstimator:
     """Iterative pose estimator for calibrated camera with 2D-3D correspondences.
     This pose estimator needs another pose estimator, which it will use to initialise the estimate and find inliers.
     """
-    def __init__(self, initial_pose_estimator, camera_model: PerspectiveCamera, print_cost=True):
+    def __init__(self, initial_pose_estimator, camera_model: PerspectiveCamera, print_cost=False):
         """Constructs pose estimator.
         :param initial_pose_estimator: Pointer to a pose estimator for initialiwation and inlier extraction.
         :param camera_model: Camera model
