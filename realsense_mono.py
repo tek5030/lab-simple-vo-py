@@ -64,9 +64,7 @@ class RealSenseSingleStreamCamera:
 
         self._capture_mode = capture_mode
 
-        bgr_size = Size(width=640, height=480)
-        #ir_size = Size(width=848, height=480)
-        #ir_size = Size(width=640, height=480)
+        bgr_size = Size(width=640, height=480)  # or Size(width=848, height=480) ?
         if capture_mode is CaptureMode.RECTIFIED:
             mode = rs2.format.y8
             ir_size = bgr_size
@@ -83,7 +81,6 @@ class RealSenseSingleStreamCamera:
 
         cfg = rs2.config()
         cfg.disable_all_streams()
-        #cfg.enable_all_streams()
         cfg.enable_stream(rs2.stream.infrared, int(CameraIndex.LEFT), **ir_size.dict, format=mode, framerate=0)
         cfg.enable_stream(rs2.stream.infrared, int(CameraIndex.RIGHT), **ir_size.dict, format=mode, framerate=0)
         cfg.enable_stream(rs2.stream.color, **bgr_size.dict, format=rs2.format.bgr8)

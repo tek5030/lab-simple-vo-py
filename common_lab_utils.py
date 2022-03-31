@@ -279,8 +279,7 @@ class CalibratedCamera:
 
 class CalibratedRealSenseCamera(CalibratedCamera):
     def __init__(self):
-        self._cam = RealSenseSingleStreamCamera(CameraStream.LEFT, CaptureMode.RECTIFIED)
-        # OBS: Hvis ikke RECTIFIED vil ikke `_get_model_from_camera` fungere
+        self._cam = RealSenseSingleStreamCamera(CameraStream.LEFT)
 
         # Create model from calibration
         super().__init__(self._get_model_from_camera())
@@ -293,13 +292,10 @@ class CalibratedRealSenseCamera(CalibratedCamera):
         )
 
     def capture_frame(self) -> np.ndarray:
-        # FIXME: Implement!
-        # Obs: kameramodellen gjelder ikke
-        # self._cam.capture_mode = CaptureMode.RECTIFIED
-        # return self._cam.get_frame()
-        pass
+        raise NotImplementedError("CalibratedRealSenseCamera does not provide raw images in this lab!")
 
     def capture_undistorted_frame(self) -> np.ndarray:
+        # NOTE: If not RECTIFIED, `_get_model_from_camera` will not be able to return data!
         self._cam.capture_mode = CaptureMode.RECTIFIED
         return self._cam.get_frame()
 
