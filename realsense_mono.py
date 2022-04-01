@@ -64,7 +64,7 @@ class RealSenseSingleStreamCamera:
 
         self._capture_mode = capture_mode
 
-        bgr_size = Size(width=640, height=480)  # or Size(width=848, height=480) ?
+        bgr_size = Size(width=848, height=480)  # or Size(width=640, height=480) ?
         if capture_mode is CaptureMode.RECTIFIED:
             mode = rs2.format.y8
             ir_size = bgr_size

@@ -25,7 +25,8 @@ def run_simple_vo_lab(camera: CalibratedCamera):
     points_estimator = SobaPointsEstimator(init_points_estimator)
 
     # Set up keypoint detector and descriptor extractor for correspondence matching.
-    detector = cv2.ORB_create(nfeatures=3000, fastThreshold=10)
+    detector = cv2.ORB_create(nfeatures=2000, nlevels=16, scaleFactor=1.1,
+                              scoreType=cv2.ORB_FAST_SCORE, fastThreshold=10)
     desc_extractor = detector
     frame_extractor = TrackingFrameExtractor(camera, detector, desc_extractor)
     matcher = Matcher(desc_extractor.defaultNorm())
@@ -184,7 +185,7 @@ def run_simple_vo_lab(camera: CalibratedCamera):
 class TwoViewRelativePoseEstimator:
     """Estimates the relative pose between to camera frames through epipolar geometry."""
 
-    def __init__(self, K: np.ndarray, max_epipolar_distance=3.0):
+    def __init__(self, K: np.ndarray, max_epipolar_distance=1.5):
         """
         Constructor
 
@@ -213,7 +214,6 @@ class TwoViewRelativePoseEstimator:
 
         # TODO 2: Use cv2.findEssentialMat() to get an inlier mask for the correspondences. Use self._max_epipolar_distance!
         # Find inliers with the 5-point algorithm
-        p = 0.99
         _, mask = (None, corr.points_index_1 > 0)      # Dummy, replace!
         mask = mask.ravel().astype(bool)
 
@@ -311,8 +311,8 @@ if __name__ == "__main__":
     # TODO 1: Choose camera.
 
     # RealSense
-    # run_simple_vo_lab(CalibratedRealSenseCamera())
+    run_simple_vo_lab(CalibratedRealSenseCamera())
 
     # Webcam
-    video_source = 0
-    run_simple_vo_lab(CalibratedWebCamera(setup_camera_model_for_webcam(), video_source))
+    # video_source = 0
+    # run_simple_vo_lab(CalibratedWebCamera(setup_camera_model_for_webcam(), video_source))

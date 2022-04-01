@@ -6,6 +6,7 @@ from anms import anms
 from realsense_common import (CameraStream, CaptureMode)
 from realsense_mono import (RealSenseSingleStreamCamera)
 
+
 class Size:
     """Represents image size"""
 
@@ -350,7 +351,7 @@ class TrackingFrameExtractor:
         return Frame(undist_frame, self._camera.camera_model, keypoints, descriptors)
 
     @staticmethod
-    def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=1000, max_ratio=0.7, tolerance=0.1):
+    def _adaptive_non_maximal_suppression(keypoints, img_size: Size, max_num=1000, max_ratio=0.7, tolerance=0.7):
         keypoints = sorted(keypoints, key=lambda x: x.response, reverse=True)
 
         num_to_retain = min(max_num, round(max_ratio * len(keypoints)))
