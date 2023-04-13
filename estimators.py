@@ -42,7 +42,7 @@ class RelativePoseEstimate:
 class PointsEstimate:
     world_points: np.ndarray = np.array([], dtype=np.float32)
     valid_correspondences: FrameToFrameCorrespondences = None
-    valid_mask: np.ndarray = np.array([], dtype=np.bool)
+    valid_mask: np.ndarray = np.array([], dtype=bool)
 
     def is_found(self):
         return self.world_points.ndim == 2 and self.world_points.shape[1] > 0

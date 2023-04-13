@@ -320,11 +320,14 @@ def setup_camera_model_for_webcam():
 
 
 if __name__ == "__main__":
-    # TODO 1: Choose camera.
+    try:
+        # TODO 1: Choose camera.
 
-    # RealSense
-    run_simple_vo_solution(CalibratedRealSenseCamera())
+        # RealSense
+        run_simple_vo_solution(CalibratedRealSenseCamera())
 
-    # Webcam
-    # video_source = 0
-    # run_simple_vo_solution(CalibratedWebCamera(setup_camera_model_for_webcam(), video_source))
+        # Webcam
+        # video_source = 0
+        # run_simple_vo_solution(CalibratedWebCamera(setup_camera_model_for_webcam(), video_source))
+    except KeyboardInterrupt:
+        pass
