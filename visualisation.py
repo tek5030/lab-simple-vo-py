@@ -110,7 +110,7 @@ class ArRenderer:
 
         # Set up plotter.
         # Set hide_rendering=False to show a window with the 3D rendering.
-        theme = pv.themes.DefaultTheme()
+        theme = pv.themes.Theme()
         theme.transparent_background = True
         self._plotter = pv.Plotter(theme=theme, off_screen=hide_rendering)
 
