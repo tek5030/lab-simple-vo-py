@@ -331,3 +331,5 @@ if __name__ == "__main__":
         # run_simple_vo_solution(CalibratedWebCamera(setup_camera_model_for_webcam(), video_source))
     except KeyboardInterrupt:
         pass
+    except RuntimeError as e:
+        print(e)
