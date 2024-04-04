@@ -20,20 +20,20 @@ Compute these disparities for all correspondences.
 The final step will be to triangulate all valid correspondences.
 For this, you will need to:
 - Compute the projection matrix **P** for each camera.
-- Use [cv::triangulatePoints()](https://docs.opencv.org/4.5.5/d9/d0c/group__calib3d.html#gad3fc9a0c82b08df034234979960b778c)
+- Use [cv::triangulatePoints()](https://docs.opencv.org/4.9.0/d9/d0c/group__calib3d.html#gad3fc9a0c82b08df034234979960b778c)
 
 
 You should now be able to run and test the complete lab. 
 
 Make sure the image window is in focus:
-- Press \<space\> to do 2-view pose estimation and 3D reconstruction.
-- Press \<space\> again to construct a 3D map.
+- Press <kbd>space</kbd> to do 2-view pose estimation and 3D reconstruction.
+- Press <kbd>space</kbd> again to construct a 3D map.
   - You will now use the Motion-only pose estimator to estimate motion relative to this map.
-- Press \<space\> again to construct a new 3D map based on the last keyframe and the current frame.
+- Press <kbd>space</kbd> again to construct a new 3D map based on the last keyframe and the current frame.
 - Continue moving around by creating new maps!
 
-- Press \<r\> to reset the map.
-- Press \<q\> to quit.
+- Press <kbd>r</kbd> to reset the map.
+- Press <kbd>q</kbd> to quit.
 
 
 ## Experiments
