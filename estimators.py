@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 from pylie import SO3, SE3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from common_lab_utils import (Frame, PerspectiveCamera, FrameToFrameCorrespondences)
 from bundle_adjustment import (PrecalibratedCameraMeasurementsFixedWorld,
                                PrecalibratedMotionOnlyBAObjective,
@@ -40,9 +40,9 @@ class RelativePoseEstimate:
 
 @dataclass
 class PointsEstimate:
-    world_points: np.ndarray = np.array([], dtype=np.float32)
+    world_points: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float32))
     valid_correspondences: FrameToFrameCorrespondences = None
-    valid_mask: np.ndarray = np.array([], dtype=bool)
+    valid_mask: np.ndarray = field(default_factory=lambda: np.array(object=[], dtype=bool))
 
     def is_found(self):
         return self.world_points.ndim == 2 and self.world_points.shape[1] > 0
