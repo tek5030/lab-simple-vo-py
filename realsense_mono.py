@@ -8,10 +8,12 @@ class RealSenseSingleStreamCamera:
         connected_devices = rs2.context().devices
         if not connected_devices:
             raise RuntimeError(f"No RealSense device detected. Is it plugged in? Can you unplug and re-plug it?")
-        for device in connected_devices:
-            attrs = ['name', 'serial_number', 'firmware_version', 'usb_type_descriptor']
-            name, serial_number, fw, usb = [device.get_info(getattr(rs2.camera_info, attr)) for attr in attrs]
-            print(f"connected device: {name}, USB{usb} (S/N: {serial_number}, FW: {fw})")
+
+        # FIXME: Dette fungerer ikke på laben
+        # for device in connected_devices:
+        #     attrs = ['name', 'serial_number', 'firmware_version', 'usb_type_descriptor']
+        #     name, serial_number, fw, usb = [device.get_info(getattr(rs2.camera_info, attr)) for attr in attrs]
+        #     print(f"connected device: {name}, USB{usb} (S/N: {serial_number}, FW: {fw})")
 
         self._active_stream = active_stream
         self._pipe = rs2.pipeline()
