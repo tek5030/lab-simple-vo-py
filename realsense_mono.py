@@ -5,6 +5,14 @@ from realsense_common import (CameraIndex, CameraStream, CaptureMode, LaserMode,
 
 class RealSenseSingleStreamCamera:
     def __init__(self, active_stream: CameraStream = CameraStream.LEFT, capture_mode: CaptureMode = CaptureMode.RECTIFIED):
+        connected_devices = rs2.context().devices
+        if not connected_devices:
+            raise RuntimeError(f"No RealSense device detected. Is it plugged in? Can you unplug and re-plug it?")
+        for device in connected_devices:
+            attrs = ['name', 'serial_number', 'firmware_version', 'usb_type_descriptor']
+            name, serial_number, fw, usb = [device.get_info(getattr(rs2.camera_info, attr)) for attr in attrs]
+            print(f"connected device: {name}, USB{usb} (S/N: {serial_number}, FW: {fw})")
+
         self._active_stream = active_stream
         self._pipe = rs2.pipeline()
         self._capture_mode = None
@@ -12,20 +20,8 @@ class RealSenseSingleStreamCamera:
         self.laser_mode = LaserMode.OFF
 
     def __del__(self):
-        self._pipe.stop()
-
-    def __str__(self):
-        device = self._pipe.get_active_profile().get_device()
-        serial_number = device.get_info(rs2.camera_info.serial_number)
-        device_product_line = str(device.get_info(rs2.camera_info.product_line))
-        info = ("RealSense:\n"
-                f"  product line: {device_product_line}\n"
-                f"  serial: {serial_number}\n"
-                f"  resolution: {self.get_resolution(self.active_stream)}\n"
-                )
-        if self.capture_mode is not CaptureMode.UNRECTIFIED:
-            info += f"  K: {self.get_calibration_matrix(self.active_stream)}\n"
-        return info
+        if hasattr(self, '_pipe'):
+            self._pipe.stop()
 
     @property
     def active_stream(self):
@@ -87,7 +83,13 @@ class RealSenseSingleStreamCamera:
         if capture_mode is CaptureMode.RECTIFIED:
             cfg.enable_stream(rs2.stream.depth, format=rs2.format.z16)
         self._pipe.start(cfg)
-        print(self)
+
+        info = f"set {capture_mode}\n"
+        info += f"  resolution: {self.get_resolution(self.active_stream)}\n"
+        if self.capture_mode is not CaptureMode.UNRECTIFIED:
+            info += f"  K: \n{self.get_calibration_matrix(self.active_stream)}\n"
+        print(info)
+
 
     def get_frame(self):
         data = self._pipe.wait_for_frames()
