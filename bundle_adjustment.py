@@ -291,7 +291,7 @@ def levenberg_marquardt(x_init, model, cost_thresh=1e-9, delta_thresh=1e-9, max_
     for it in range(max_num_it):
         inf_mat = A.T @ A
 
-        tau = scipy.linalg.solve(inf_mat + np.diag(curr_lambda * np.diag(inf_mat)), A.T @ b, 'pos')
+        tau = scipy.linalg.solve(inf_mat + np.diag(curr_lambda * np.diag(inf_mat)), A.T @ b, assume_a='pos')
         x_new = x[it] + tau
 
         A, b, cost_new = model.linearise(x_new)
