@@ -179,17 +179,10 @@ def add_axis(plotter, pose: SE3, scale=0.1):
 
     T = pose.to_matrix()
 
-    point = pv.Sphere(radius=0.1 * scale)
-    point.transform(T)
-
-    x_arrow = pv.Arrow(direction=(1.0, 0.0, 0.0), scale=scale)
-    x_arrow.transform(T)
-
-    y_arrow = pv.Arrow(direction=(0.0, 1.0, 0.0), scale=scale)
-    y_arrow.transform(T)
-
-    z_arrow = pv.Arrow(direction=(0.0, 0.0, 1.0), scale=scale)
-    z_arrow.transform(T)
+    point = pv.Sphere(radius=0.1 * scale).transform(T, inplace=False)
+    x_arrow = pv.Arrow(direction=(1.0, 0.0, 0.0), scale=scale).transform(T, inplace=False)
+    y_arrow = pv.Arrow(direction=(0.0, 1.0, 0.0), scale=scale).transform(T, inplace=False)
+    z_arrow = pv.Arrow(direction=(0.0, 0.0, 1.0), scale=scale).transform(T, inplace=False)
 
     axis_actors = (
         plotter.add_mesh(point),
@@ -214,12 +207,9 @@ def add_frustum(plotter, pose_w_c, camera_model, image, scale=0.1):
 
     point_focal = np.zeros([3])
 
-    pyramid = pv.Pyramid([point_bottom_left, point_bottom_right, point_top_left, point_top_right, point_focal])
-    pyramid.transform(S)
-
-    rectangle = pv.Rectangle([point_bottom_left, point_bottom_right, point_top_left])
+    pyramid = pv.Pyramid([point_bottom_left, point_bottom_right, point_top_left, point_top_right, point_focal]).transform(S, inplace=False)
+    rectangle = pv.Rectangle([point_bottom_left, point_bottom_right, point_top_left]).transform(S, inplace=False)
     rectangle.texture_map_to_plane(inplace=True)
-    rectangle.transform(S)
 
     image_flipped_rgb = image[::-1, :, ::-1].copy()
     tex = pv.numpy_to_texture(image_flipped_rgb)

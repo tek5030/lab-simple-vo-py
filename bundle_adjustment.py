@@ -98,7 +98,7 @@ class PrecalibratedMotionOnlyBAObjective:
             A[rows, :] = self.extract_measurement_jacobian(j, pose_state_c_w, self.measurement)
             b[rows, :] = self.extract_measurement_error(j, pose_state_c_w, self.measurement)
 
-        return A, b, b.T.dot(b)
+        return A, b, b.T.dot(b).item()
 
 
 class PrecalibratedStructureOnlyBAObjective:
@@ -160,7 +160,7 @@ class PrecalibratedStructureOnlyBAObjective:
                 A[rows, cols] = self.extract_measurement_jacobian(j, point_states_w[j], self.measurements[i])
                 b[rows, :] = self.extract_measurement_error(j, point_states_w[j], self.measurements[i])
 
-        return A, b, b.T.dot(b)
+        return A, b, b.T.dot(b).item()
 
 
 class CompositeStateVariable:
