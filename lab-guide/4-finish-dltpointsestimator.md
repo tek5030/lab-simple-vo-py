@@ -42,6 +42,5 @@ How does the very *naive* VO method work?
   Is the estimated pose near the starting pose?
 - Is SOBA necessary in this application?
 - Can you construct a 3D model while moving towards or away from the scene?
-- You might find the matching a bit jittery. How does SIFT work for example?
-- Play around with parameters!
-- Study the code for SOBA.
+- Play around with parameters. What happens?
+- Study the code for SOBA, and relate the implementation to the theory in the lecture.
