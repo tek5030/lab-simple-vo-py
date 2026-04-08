@@ -212,7 +212,9 @@ class TwoViewRelativePoseEstimator:
         points_2 = corr.points_2
 
         # TODO 2: Use cv2.findEssentialMat() to get an inlier mask for the correspondences. Use self._max_epipolar_distance!
-        # Find inliers with the 5-point algorithm
+        # Find inliers with the 5-point algorithm.
+        # In order to make camera 1 the reference (and compute E_12)
+        # we need to order the points like this: cv2.findEssentialMat(points_2, points_1, ...).
         _, mask = cv2.findEssentialMat(points_2, points_1, self._K, method=cv2.RANSAC,
                                        threshold=self._max_epipolar_distance)
         mask = mask.ravel().astype(bool)
@@ -228,6 +230,8 @@ class TwoViewRelativePoseEstimator:
 
         # TODO 3: Compute the fundamental matrix from the entire inlier set using cv2.findFundamentalMat()
         # Compute Fundamental Matrix from all inliers.
+        # In order to make camera 1 the reference (and compute F_12)
+        # we need to order the points like this: cv2.findFundamentalMat(inlier_points_2, inlier_points_1, ...).
         F, _ = cv2.findFundamentalMat(inlier_points_2, inlier_points_1, cv2.FM_8POINT)
 
         # TODO 4: Compute the essential matrix from the fundamental matrix.
