@@ -25,8 +25,7 @@ def run_simple_vo_lab(camera: CalibratedCamera):
     points_estimator = SobaPointsEstimator(init_points_estimator)
 
     # Set up keypoint detector and descriptor extractor for correspondence matching.
-    detector = cv2.ORB_create(nfeatures=2000, nlevels=16, scaleFactor=1.1,
-                              scoreType=cv2.ORB_FAST_SCORE, fastThreshold=10)
+    detector = cv2.SIFT_create(nfeatures=2000, )
     desc_extractor = detector
     frame_extractor = TrackingFrameExtractor(camera, detector, desc_extractor)
     matcher = Matcher(desc_extractor.defaultNorm())

@@ -327,7 +327,7 @@ class CalibratedWebCamera(CalibratedCamera):
 
 
 class TrackingFrameExtractor:
-    def __init__(self, camera: CalibratedCamera, detector, desc_extractor, use_anms=True):
+    def __init__(self, camera: CalibratedCamera, detector, desc_extractor, use_anms=False):
         self._camera = camera
         self._detector = detector
         self._desc_extractor = desc_extractor
